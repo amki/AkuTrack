@@ -1,0 +1,11 @@
+{
+  "Author": "Enthusiastus",
+  "Name": "AkuTrack",
+  "Punchline": "A Plugin to track objects in the game and send them to Akurosia Kamo.",
+  "Description": "AkuTrack /akut",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "plugin",
+    "object"
+  ]
+}

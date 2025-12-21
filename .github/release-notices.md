@@ -1,0 +1,1 @@
+This plugin is currently in early alpha. Expect bugs. [GitHub repository](https://github.com/amki/AkuTrack).

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -6,7 +6,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Lumina.Excel.Sheets;
 
-namespace SamplePlugin.Windows;
+namespace AkuTrack.Windows;
 
 public class MainWindow : Window, IDisposable
 {
@@ -16,8 +16,8 @@ public class MainWindow : Window, IDisposable
     // We give this window a hidden ID using ##.
     // The user will see "My Amazing Window" as window title,
     // but for ImGui the ID is "My Amazing Window##With a hidden ID"
-    public MainWindow(Plugin plugin, string goatImagePath)
-        : base("My Amazing Window##With a hidden ID", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+    public MainWindow()
+        : base("AkuTrack##With a hidden ID", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         SizeConstraints = new WindowSizeConstraints
         {
@@ -25,15 +25,12 @@ public class MainWindow : Window, IDisposable
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
 
-        this.goatImagePath = goatImagePath;
-        this.plugin = plugin;
     }
 
     public void Dispose() { }
 
     public override void Draw()
     {
-        ImGui.Text($"The random config bool is {plugin.Configuration.SomePropertyToBeSavedAndWithADefault}");
 
         if (ImGui.Button("Show Settings"))
         {
@@ -51,18 +48,7 @@ public class MainWindow : Window, IDisposable
             if (child.Success)
             {
                 ImGui.Text("Have a goat:");
-                var goatImage = Plugin.TextureProvider.GetFromFile(goatImagePath).GetWrapOrDefault();
-                if (goatImage != null)
-                {
-                    using (ImRaii.PushIndent(55f))
-                    {
-                        ImGui.Image(goatImage.Handle, goatImage.Size);
-                    }
-                }
-                else
-                {
-                    ImGui.Text("Image not found.");
-                }
+                ImGui.Text("Image not found.");
 
                 ImGuiHelpers.ScaledDummy(20.0f);
 

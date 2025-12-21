@@ -1,12 +1,14 @@
-﻿using Dalamud.Game.Command;
+using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using System.IO;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using SamplePlugin.Windows;
+using AkuTrack.Windows;
+using Microsoft.Extensions.DependencyInjection;
+using AkuTrack.Managers;
 
-namespace SamplePlugin;
+namespace AkuTrack;
 
 public sealed class Plugin : IDalamudPlugin
 {
@@ -18,15 +20,21 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
-    private const string CommandName = "/pmycommand";
+    private const string CommandName = "/akut";
 
     public Configuration Configuration { get; init; }
 
-    public readonly WindowSystem WindowSystem = new("SamplePlugin");
+    public readonly WindowSystem WindowSystem = new("AkuTrack");
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
 
-    public Plugin()
+    public Plugin(
+        IFramework framework,
+        IClientState clientState,
+        IDalamudPluginInterface pluginInterface,
+        IChatGui chatGui,
+        IPluginLog pluginLog,
+        IObjectTable objectTable)
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
@@ -34,7 +42,21 @@ public sealed class Plugin : IDalamudPlugin
         var goatImagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "goat.png");
 
         ConfigWindow = new ConfigWindow(this);
-        MainWindow = new MainWindow(this, goatImagePath);
+
+        var serviceProvider = new ServiceCollection()
+            .AddSingleton(framework)
+            .AddSingleton(clientState)
+            .AddSingleton(pluginInterface)
+            .AddSingleton(chatGui)
+            .AddSingleton(pluginLog)
+            .AddSingleton(objectTable)
+            .AddSingleton<Configuration>()
+            .AddSingleton<MainWindow>()
+            .AddSingleton<ObjTrackManager>()
+            .BuildServiceProvider();
+
+        MainWindow = serviceProvider.GetRequiredService<MainWindow>();
+        ObjTrackManager ObjTrackManager = serviceProvider.GetService<ObjTrackManager>();
 
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);
