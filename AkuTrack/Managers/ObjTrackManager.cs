@@ -116,12 +116,5 @@ namespace AkuTrack.Managers
             if(objects.Count > 1)
                 _ = uploadManager.DoUpload("duckit/", objects);
         }
-
-        public static bool IsCharacterVisible(this ICharacter chr)
-        {
-            var v = (IntPtr)(((FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)chr.Address)->GameObject.DrawObject);
-            if (v == IntPtr.Zero) return false;
-            return Bitmask.IsBitSet(*(byte*)(v + 136), 0);
-        }
     }
 }
