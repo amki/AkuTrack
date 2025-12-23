@@ -52,11 +52,11 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(objectTable)
             .AddSingleton<Configuration>()
             .AddSingleton<MainWindow>()
+            .AddSingleton<UploadManager>()
             .AddSingleton<ObjTrackManager>()
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
-        ObjTrackManager ObjTrackManager = serviceProvider.GetService<ObjTrackManager>();
 
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);

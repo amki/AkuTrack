@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -12,13 +13,15 @@ public class MainWindow : Window, IDisposable
 {
     private readonly string goatImagePath;
     private readonly Plugin plugin;
+    private readonly ObjTrackManager objTrackManager;
 
     // We give this window a hidden ID using ##.
     // The user will see "My Amazing Window" as window title,
     // but for ImGui the ID is "My Amazing Window##With a hidden ID"
-    public MainWindow()
+    public MainWindow(ObjTrackManager objTrackManager)
         : base("AkuTrack##With a hidden ID", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
+        this.objTrackManager = objTrackManager;
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(375, 330),
@@ -32,9 +35,9 @@ public class MainWindow : Window, IDisposable
     public override void Draw()
     {
 
-        if (ImGui.Button("Show Settings"))
+        if (ImGui.Button("Clear Seen List"))
         {
-            plugin.ToggleConfigUi();
+            objTrackManager.CleanSeen();
         }
 
         ImGui.Spacing();
