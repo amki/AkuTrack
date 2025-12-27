@@ -50,8 +50,7 @@ public class MainWindow : Window, IDisposable
             // Check if this child is drawing
             if (child.Success)
             {
-                ImGui.Text("Have a goat:");
-                ImGui.Text("Image not found.");
+                ImGui.Text($"I have seen {objTrackManager.seenList.Count} objects since last reset.");
 
                 ImGuiHelpers.ScaledDummy(20.0f);
 

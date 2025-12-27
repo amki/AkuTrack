@@ -21,7 +21,7 @@ namespace AkuTrack.Managers
         private readonly IClientState clientState;
         private readonly UploadManager uploadManager;
 
-        private Dictionary<ulong, Vector3> seenList = new();
+        public Dictionary<ulong, Vector3> seenList = new();
 
         private TimeSpan lastUpdate = new(0);
         private TimeSpan execDelay = new(0, 0, 1);
@@ -72,7 +72,13 @@ namespace AkuTrack.Managers
             List<AkuGameObject> objects = new();
             foreach (var obj in objectTable)
             {
-                if(obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player || obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.MountType || obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion) {
+                // no players, mounts, minion pets, housing items, wings/umbrellas
+                if(obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player ||
+                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.MountType ||
+                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion ||
+                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Housing ||
+                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament
+                    ) {
                     continue;
                 }
                 if (seenList.ContainsKey(obj.GameObjectId))
@@ -85,31 +91,28 @@ namespace AkuTrack.Managers
                     
                 }
                 else {
+                    var owner = objectTable.SearchById(obj.OwnerId);
                     log.Debug($"Found new obj {obj.Name} @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
                     seenList.Add(obj.GameObjectId, obj.Position);
                     var upObj = new AkuGameObject(obj);
                     upObj.mid = clientState.MapId;
                     upObj.zid = clientState.TerritoryType;
+                    
 
                     if (obj is ICharacter c) {
                         upObj.nid = c.NameId;
                         FFXIVClientStructs.FFXIV.Client.Game.Character.Character* chr = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)c.Address;
                         upObj.moid = chr->ModelContainer.ModelCharaId;
+                        upObj.npiid = chr->NamePlateIconId;
                     }
 
-
-                    objects.Add(upObj);
-                    /*
-                        if (obj is not IBattleNpc mob)
-                        {
-                            log.Debug($"Found NOT bNpc {obj.Name} @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
-                        }
-                        else
-                        {
-                            var battlenpc = mob as IBattleNpc;
-                            log.Debug($"Found BNpc {mob.Name} @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
-                        }
-                        */
+                    if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player)
+                    {
+                        log.Debug($"Obj {obj.Name} is player owned. Not sending. @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
+                        continue;
+                    } else {
+                        objects.Add(upObj);
+                    }
                 }
                 
             }

@@ -25,6 +25,7 @@ namespace AkuTrack.ApiTypes
         public float y { get; set; }
         public float z { get; set; }
         public uint bid { get; set; }
+        public uint npiid {  get; set; }
         public int moid { get; set; }
         //public bool v { get; set; }
         public float hr { get; set; }
