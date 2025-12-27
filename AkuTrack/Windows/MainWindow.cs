@@ -1,11 +1,14 @@
-using System;
-using System.Numerics;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
+using System;
+using System.Linq;
+using System.Numerics;
+using System.Threading;
 
 namespace AkuTrack.Windows;
 
@@ -14,13 +17,17 @@ public class MainWindow : Window, IDisposable
     private readonly string goatImagePath;
     private readonly Plugin plugin;
     private readonly ObjTrackManager objTrackManager;
+    private readonly IDataManager dataManager;
+    private readonly IClientState clientState;
 
     // We give this window a hidden ID using ##.
     // The user will see "My Amazing Window" as window title,
     // but for ImGui the ID is "My Amazing Window##With a hidden ID"
-    public MainWindow(ObjTrackManager objTrackManager)
+    public MainWindow(ObjTrackManager objTrackManager, IDataManager dataManager, IClientState clientState)
         : base("AkuTrack##With a hidden ID", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
+        this.dataManager = dataManager;
+        this.clientState = clientState;
         this.objTrackManager = objTrackManager;
         SizeConstraints = new WindowSizeConstraints
         {
@@ -69,7 +76,28 @@ public class MainWindow : Window, IDisposable
                     ImGui.Text("Our current job is currently not valid.");
                     return;
                 }
+                ImGui.Text($"Objects still to upload [{objTrackManager.toUpload.Count}]:");
+                foreach (var o in objTrackManager.toUpload)
+                {
+                    if (ImGui.CollapsingHeader($"[{o.bid}]"))
+                    {
+                        ImGui.Text($"Position: {o.x}/{o.y}/{o.z}");
 
+                    }
+                }
+                ImGui.Text($"Seen objects [{objTrackManager.seenList.Count}]:");
+                foreach (var o in objTrackManager.seenList)
+                {
+                    if (ImGui.CollapsingHeader($"[{o.Value.BaseId}] {o.Value.Name}"))
+                    {
+                        ImGui.Text($"BaseId: {o.Value.BaseId}");
+                        //Map map = dataManager.GetExcelSheet<Map>().FirstOrDefault(m => m.TerritoryType.RowId == clientState.TerritoryType);
+                        //ImGui.Text($"Map: {map.PlaceName.Value.Name}");
+                        ImGui.Text($"Position: {o.Value.Position.ToString()}");
+                    }
+                }
+                
+                /*
                 // If you want to see the Macro representation of this SeString use `.ToMacroString()`
                 // More info about SeStrings: https://dalamud.dev/plugin-development/sestring/
                 ImGui.Text($"Our current job is ({playerState.ClassJob.RowId}) '{playerState.ClassJob.Value.Abbreviation}' with level {playerState.Level}");
@@ -84,6 +112,7 @@ public class MainWindow : Window, IDisposable
                 {
                     ImGui.Text("Invalid territory.");
                 }
+                */
             }
         }
     }

@@ -32,6 +32,7 @@ public sealed class Plugin : IDalamudPlugin
         IFramework framework,
         IClientState clientState,
         IDalamudPluginInterface pluginInterface,
+        IDataManager dataManager,
         IChatGui chatGui,
         IPluginLog pluginLog,
         IObjectTable objectTable)
@@ -47,6 +48,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(framework)
             .AddSingleton(clientState)
             .AddSingleton(pluginInterface)
+            .AddSingleton(dataManager)
             .AddSingleton(chatGui)
             .AddSingleton(pluginLog)
             .AddSingleton(objectTable)
@@ -57,6 +59,7 @@ public sealed class Plugin : IDalamudPlugin
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
+
 
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);

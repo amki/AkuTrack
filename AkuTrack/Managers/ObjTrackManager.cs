@@ -21,7 +21,8 @@ namespace AkuTrack.Managers
         private readonly IClientState clientState;
         private readonly UploadManager uploadManager;
 
-        public Dictionary<ulong, Vector3> seenList = new();
+        public Dictionary<ulong, IGameObject> seenList = new();
+        public List<AkuGameObject> toUpload = new();
 
         private TimeSpan lastUpdate = new(0);
         private TimeSpan execDelay = new(0, 0, 1);
@@ -48,7 +49,8 @@ namespace AkuTrack.Managers
         }
 
         public void CleanSeen() {
-            seenList.Clear(); 
+            seenList.Clear();
+            toUpload.Clear();
         }
 
         private void Tick(IFramework framework)
@@ -61,13 +63,22 @@ namespace AkuTrack.Managers
             }
         }
 
-        private unsafe void DoUpdate(IFramework framework)
+        private async void DoUpdate(IFramework framework)
         {
             //log.Debug("Tick!");
-            CheckObjectTable();
+            var ups = LookForNewObjects();
+            if (ups.Count > 0)
+            {
+                toUpload.AddRange(ups);
+                var res = await uploadManager.DoUpload("duckit/", toUpload);
+                log.Debug($"Uploading was {res}");
+                if (res) {
+                    toUpload.Clear();
+                }
+            }
         }
 
-        private unsafe void CheckObjectTable()
+        private unsafe List<AkuGameObject> LookForNewObjects()
         {
             List<AkuGameObject> objects = new();
             foreach (var obj in objectTable)
@@ -83,22 +94,19 @@ namespace AkuTrack.Managers
                 }
                 if (seenList.ContainsKey(obj.GameObjectId))
                 {
-                    var oldPos = seenList[obj.GameObjectId];
-                    if (oldPos == obj.Position)
+                    var oldObj = seenList[obj.GameObjectId];
+                    if (oldObj.Position == obj.Position)
                         continue;
                     log.Debug($"Known obj {obj.Name} is now @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
-                    seenList[obj.GameObjectId] = obj.Position;
-                    
-                }
-                else {
+                    seenList[obj.GameObjectId] = obj;
+                } else {
                     var owner = objectTable.SearchById(obj.OwnerId);
                     log.Debug($"Found new obj {obj.Name} @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
-                    seenList.Add(obj.GameObjectId, obj.Position);
+                    seenList.Add(obj.GameObjectId, obj);
                     var upObj = new AkuGameObject(obj);
                     upObj.mid = clientState.MapId;
                     upObj.zid = clientState.TerritoryType;
                     
-
                     if (obj is ICharacter c) {
                         upObj.nid = c.NameId;
                         FFXIVClientStructs.FFXIV.Client.Game.Character.Character* chr = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)c.Address;
@@ -114,10 +122,8 @@ namespace AkuTrack.Managers
                         objects.Add(upObj);
                     }
                 }
-                
             }
-            if(objects.Count > 1)
-                _ = uploadManager.DoUpload("duckit/", objects);
+            return objects;
         }
     }
 }
