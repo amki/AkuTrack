@@ -7,7 +7,7 @@
     "AssemblyVersion": "0.0.7",
     "TestingAssemblyVersion": "0.0.7",
     "RepoUrl": "https://github.com/amki/AkuTrack",
-    "IconUrl": "https://github.com/amki/AkuTrack/raw/main/akutrack.png",
+    "IconUrl": "https://github.com/amki/AkuTrack/raw/master/akutrack.png",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 14,
     "TestingDalamudApiLevel": 14,
