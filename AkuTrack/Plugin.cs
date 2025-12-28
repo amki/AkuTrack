@@ -33,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
         IClientState clientState,
         IDalamudPluginInterface pluginInterface,
         IDataManager dataManager,
+        ITextureProvider textureProvider,
         IChatGui chatGui,
         IPluginLog pluginLog,
         IObjectTable objectTable)
@@ -49,6 +50,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(clientState)
             .AddSingleton(pluginInterface)
             .AddSingleton(dataManager)
+            .AddSingleton(textureProvider)
             .AddSingleton(chatGui)
             .AddSingleton(pluginLog)
             .AddSingleton(objectTable)

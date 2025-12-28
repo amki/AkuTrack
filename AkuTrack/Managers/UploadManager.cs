@@ -23,23 +23,30 @@ namespace AkuTrack.Managers
 
         public async Task<bool> DoUpload(string target, List<AkuGameObject> payload)
         {
-            return await Task.Run(async () => {
-                var str = JsonConvert.SerializeObject(payload);
-                var httpContent = new StringContent(str, Encoding.UTF8, "application/json");
-                log.Debug($"Sending <{str}> to AkuAPI.");
-                var response = await httpClient.PostAsync($"{baseUrl}/{target}", httpContent);
-                if (response.StatusCode == HttpStatusCode.OK)
+            try
+            {
+                return await Task.Run(async () =>
                 {
-                    log.Debug("Uploaded to AkuAPI.");
-                    return true;
-                }
-                else
-                {
-                    string responseBody = await response.Content.ReadAsStringAsync();
-                    log.Debug($"Uploaded failed {response.StatusCode}; {responseBody}");
-                    return false;
-                }
-            });
+                    var str = JsonConvert.SerializeObject(payload);
+                    var httpContent = new StringContent(str, Encoding.UTF8, "application/json");
+                    log.Debug($"Sending <{str}> to AkuAPI.");
+                    var response = await httpClient.PostAsync($"{baseUrl}/{target}", httpContent);
+                    if (response.StatusCode == HttpStatusCode.OK)
+                    {
+                        log.Debug("Uploaded to AkuAPI.");
+                        return true;
+                    }
+                    else
+                    {
+                        string responseBody = await response.Content.ReadAsStringAsync();
+                        log.Debug($"Uploaded failed {response.StatusCode}; {responseBody}");
+                        return false;
+                    }
+                });
+            } catch(HttpIOException e) {
+                log.Debug($"HTTP Exception: {e.Message}");
+                return false;
+            }
         }
     }
 }
