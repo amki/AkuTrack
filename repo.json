@@ -4,8 +4,8 @@
     "Name": "AkuTrack",
     "InternalName": "AkuTrack",
     "Description": "Tracks GameObjects and sends them to Akurosia Kamo",
-    "AssemblyVersion": "0.0.10",
-    "TestingAssemblyVersion": "0.0.10",
+    "AssemblyVersion": "0.0.11",
+    "TestingAssemblyVersion": "0.0.11",
     "RepoUrl": "https://github.com/amki/AkuTrack",
     "IconUrl": "https://github.com/amki/AkuTrack/raw/master/akutrack.png",
     "ApplicableVersion": "any",
@@ -15,8 +15,8 @@
       "plugin",
       "object"
     ],
-    "DownloadLinkInstall": "https://github.com/amki/AkuTrack/releases/download/v0.0.10/latest.zip",
-    "DownloadLinkTesting": "https://github.com/amki/AkuTrack/releases/download/v0.0.10/latest.zip",
-    "DownloadLinkUpdate": "https://github.com/amki/AkuTrack/releases/download/v0.0.10/latest.zip"
+    "DownloadLinkInstall": "https://github.com/amki/AkuTrack/releases/download/v0.0.11/latest.zip",
+    "DownloadLinkTesting": "https://github.com/amki/AkuTrack/releases/download/v0.0.11/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/amki/AkuTrack/releases/download/v0.0.11/latest.zip"
   }
 ]
