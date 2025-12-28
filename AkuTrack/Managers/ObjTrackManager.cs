@@ -83,12 +83,13 @@ namespace AkuTrack.Managers
             List<AkuGameObject> objects = new();
             foreach (var obj in objectTable)
             {
-                // no players, mounts, minion pets, housing items, wings/umbrellas
+                // no players, mounts, minion pets, housing items, wings/umbrellas, retainers
                 if(obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player ||
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.MountType ||
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion ||
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Housing ||
-                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament
+                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament ||
+                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer
                     ) {
                     continue;
                 }

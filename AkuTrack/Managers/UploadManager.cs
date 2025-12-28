@@ -1,6 +1,7 @@
 using AkuTrack.ApiTypes;
 using Dalamud.Plugin.Services;
 using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
@@ -43,8 +44,8 @@ namespace AkuTrack.Managers
                         return false;
                     }
                 });
-            } catch(HttpIOException e) {
-                log.Debug($"HTTP Exception: {e.Message}");
+            } catch(Exception e) {
+                log.Debug($"Exception: {e.Message}");
                 return false;
             }
         }
