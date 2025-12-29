@@ -172,6 +172,18 @@ public class MapWindow : Window, IDisposable
         {
             DrawAkuGameObject(o.Value);
         }
+        var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRow(clientState.TerritoryType);
+        var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.Map.Value.MapMarkerRange);
+        foreach (var row in rows)
+        {
+            if (row.X == 0 && row.Y == 0)
+            {
+                continue;
+            }
+            var pos = new Vector2(row.X, row.Y);
+            //log.Debug($"Icon {row.Icon} to {pos} {row.SubrowId} |{row.PlaceNameSubtext.Value.Name}|");
+            DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString());
+        }
     }
 
     private void DrawAkuGameObject(AkuGameObject obj) {
@@ -218,18 +230,6 @@ public class MapWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip($"Created: {obj.created_at}\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
-        }
-        var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRow(clientState.TerritoryType);
-        var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.Map.Value.MapMarkerRange);
-        foreach (var row in rows)
-        {
-            if (row.X == 0 && row.Y == 0)
-            {
-                continue;
-            }
-            var pos = new Vector2(row.X, row.Y);
-            //log.Debug($"Icon {row.Icon} to {pos} {row.SubrowId} |{row.PlaceNameSubtext.Value.Name}|");
-            DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString());
         }
     }
 
