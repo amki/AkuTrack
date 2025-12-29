@@ -31,6 +31,20 @@ namespace AkuTrack.ApiTypes
                 this.npiid = chr->NamePlateIconId;
             }
         }
+
+        public AkuGameObject(DownloadGameObject dgo) {
+            this.t = dgo.objecttype;
+            this.name = "<downloaded>";
+            this.mid = dgo.map_id;
+            this.zid = dgo.zone_id;
+            this.pos = new Vector3(dgo.x,dgo.y, dgo.z);
+            this.r = dgo.rotation;
+            this.bid = dgo.base_id;
+            this.npiid = dgo.npiid;
+            this.moid = dgo.moid;
+            this.hr = dgo.hit_radius;
+            this.nid = dgo.nid;
+        }
         public string t { get; set; }
         [JsonIgnore]
         public string name { get; set; }

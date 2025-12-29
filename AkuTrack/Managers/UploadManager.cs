@@ -1,8 +1,10 @@
 using AkuTrack.ApiTypes;
 using Dalamud.Plugin.Services;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -20,6 +22,22 @@ namespace AkuTrack.Managers
         ) {
             this.log = log;
             httpClient = new HttpClient();
+        }
+
+        public async Task<List<AkuGameObject>> DownloadMapContentFromAPI(uint mid) {
+            var result = new List<AkuGameObject>();
+            var response = await httpClient.GetAsync($"{baseUrl}/api.php?t=None&mid={mid}&sort=created_at_desc&offset=0");
+            var responseBody = await response.Content.ReadAsStringAsync();
+            JObject answer = JObject.Parse(responseBody);
+            IList<JToken> results = answer["items"].Children().ToList();
+            foreach (JToken res in results)
+            {
+                // JToken.ToObject is a helper method that uses JsonSerializer internally
+                DownloadGameObject dgo = res.ToObject<DownloadGameObject>();
+                result.Add(new AkuGameObject(dgo));
+            }
+            log.Debug($"Found {result.Count} downloads.");
+            return result;
         }
 
         public async Task<bool> DoUpload(string target, List<AkuGameObject> payload)

@@ -16,6 +16,7 @@ using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
 using Lumina.Excel.Sheets.Experimental;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Drawing;
 using System.IO;
@@ -32,6 +33,7 @@ public class MapWindow : Window, IDisposable
     private readonly string goatImagePath;
     private readonly Plugin plugin;
     private readonly ObjTrackManager objTrackManager;
+    private readonly UploadManager uploadManager;
     private readonly IDataManager dataManager;
     private readonly IClientState clientState;
     private readonly IPluginLog log;
@@ -47,15 +49,19 @@ public class MapWindow : Window, IDisposable
     private IDalamudTextureWrap? blendedTexture;
     private string blendedPath = string.Empty;
     public float ZoomSpeed = 0.25f;
+    private uint oldMap = 0;
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly AkuObjectContextMenu akuObjectContextMenu = new();
+
+    public Dictionary<string, AkuGameObject> downloadList = new();
 
     // We give this window a hidden ID using ##.
     // The user will see "My Amazing Window" as window title,
     // but for ImGui the ID is "My Amazing Window##With a hidden ID"
     public MapWindow(
         ObjTrackManager objTrackManager,
+        UploadManager uploadManager,
         IDataManager dataManager,
         IClientState clientState,
         ITextureProvider textureProvider,
@@ -68,6 +74,7 @@ public class MapWindow : Window, IDisposable
         this.dataManager = dataManager;
         this.clientState = clientState;
         this.objTrackManager = objTrackManager;
+        this.uploadManager = uploadManager;
         this.textureProvider = textureProvider;
         this.textureSubstitutionProvider = textureSubstitutionProvider;
         SizeConstraints = new WindowSizeConstraints
@@ -141,46 +148,74 @@ public class MapWindow : Window, IDisposable
         {
             DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
         }
+        if(clientState.MapId != oldMap) {
+            log.Debug($"Map has changed, load new data!");
+            oldMap = clientState.MapId;
+            Task.Run(async () =>
+            {
+                var objs = await uploadManager.DownloadMapContentFromAPI(clientState.MapId);
+                log.Debug($"MapWindow: Got objs: {objs}");
+                foreach (var obj in objs)
+                {
+                    downloadList.Add(obj.GetUniqueId(), obj);
+                }
+            });
+
+        }
         foreach (var o in objTrackManager.seenList)
         {
-            if (o.Value.mid != clientState.MapId)
-                continue;
-            if (o.Value.t == "EventNpc") { 
-                DrawIcon(60424, o.Value.pos, o.Value.r);
-            }
-            else if(o.Value.t == "EventObj") {
-                if (o.Value.bid == 2000401)
-                    DrawIcon(60425, o.Value.pos, o.Value.r);
-                else if (o.Value.bid == 2000402)
-                    DrawIcon(60570, o.Value.pos, o.Value.r);
-                else if (o.Value.bid == 2000470)
-                    DrawIcon(60460, o.Value.pos, o.Value.r);
-                else
-                    DrawIcon(60353, o.Value.pos, o.Value.r);
-            }
-            else if (o.Value.t == "BattleNpc") {
-                DrawIcon(60422, o.Value.pos, o.Value.r);
-            }
-            else if (o.Value.t == "Aetheryte") {
-                var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(o.Value.bid);
-                if (x.Value.AethernetName.Value.Name.ToString() != string.Empty && x.Value.PlaceName.Value.Name.ToString() == string.Empty)
-                {
-                    DrawIcon(60430, o.Value.pos, 3.14f);
-                }
-                else
-                {
-                    DrawIcon(60453, o.Value.pos, 3.14f);
-                }
-            }
-            else if (o.Value.t == "GatheringPoint") {
-                var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().GetRowOrDefault(o.Value.bid);
-                DrawIcon(x.Value.GatheringPointBase.Value.GatheringType.Value.IconMain, o.Value.pos, o.Value.r);
+            DrawAkuGameObject(o.Value);
+        }
+        foreach (var o in downloadList)
+        {
+            DrawAkuGameObject(o.Value);
+        }
+    }
+
+    private void DrawAkuGameObject(AkuGameObject obj) {
+        if (obj.mid != clientState.MapId)
+            return;
+        if (obj.t == "EventNpc")
+        {
+            DrawIcon(60424, obj.pos, obj.r);
+        }
+        else if (obj.t == "EventObj")
+        {
+            if (obj.bid == 2000401)
+                DrawIcon(60425, obj.pos, obj.r);
+            else if (obj.bid == 2000402)
+                DrawIcon(60570, obj.pos, obj.r);
+            else if (obj.bid == 2000470)
+                DrawIcon(60460, obj.pos, obj.r);
+            else
+                DrawIcon(60353, obj.pos, obj.r);
+        }
+        else if (obj.t == "BattleNpc")
+        {
+            DrawIcon(60422, obj.pos, obj.r);
+        }
+        else if (obj.t == "Aetheryte")
+        {
+            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(obj.bid);
+            if (x.Value.AethernetName.Value.Name.ToString() != string.Empty && x.Value.PlaceName.Value.Name.ToString() == string.Empty)
+            {
+                DrawIcon(60430, obj.pos, 3.14f);
             }
             else
-                DrawIcon(60515, o.Value.pos, o.Value.r);
-            if (ImGui.IsItemHovered()) {
-                ImGui.SetTooltip($"Name: {o.Value.name}\nType: {o.Value.t}\nBaseID: {o.Value.bid}");
+            {
+                DrawIcon(60453, obj.pos, 3.14f);
             }
+        }
+        else if (obj.t == "GatheringPoint")
+        {
+            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().GetRowOrDefault(obj.bid);
+            DrawIcon(x.Value.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r);
+        }
+        else
+            DrawIcon(60515, obj.pos, obj.r);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip($"Name: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
         }
     }
 
