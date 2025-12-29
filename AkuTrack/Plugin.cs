@@ -1,12 +1,13 @@
+using AkuTrack.Managers;
+using AkuTrack.Windows;
 using Dalamud.Game.Command;
+using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
-using System.IO;
-using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using AkuTrack.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using AkuTrack.Managers;
+using System.IO;
+using static FFXIVClientStructs.FFXIV.Client.UI.AddonActionCross;
 
 namespace AkuTrack;
 
@@ -45,8 +46,6 @@ public sealed class Plugin : IDalamudPlugin
         // You might normally want to embed resources and load them from the manifest stream
         var goatImagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "goat.png");
 
-        ConfigWindow = new ConfigWindow(this);
-
         var serviceProvider = new ServiceCollection()
             .AddSingleton(framework)
             .AddSingleton(clientState)
@@ -59,12 +58,14 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(textureSubstitutionProvider)
             .AddSingleton<Configuration>()
             .AddSingleton<MainWindow>()
+            .AddSingleton<ConfigWindow>()
             .AddSingleton<MapWindow>()
             .AddSingleton<UploadManager>()
             .AddSingleton<ObjTrackManager>()
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
+        ConfigWindow = serviceProvider.GetRequiredService<ConfigWindow>();
         MapWindow = serviceProvider.GetRequiredService<MapWindow>();
 
 
@@ -77,10 +78,7 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "A useful message to display in /xlhelp"
         });
 
-        CommandManager.AddHandler("/akum", new CommandInfo((string command, string args) =>
-        {
-            MapWindow.Toggle();
-        }));
+        CommandManager.AddHandler("/akum", new CommandInfo((string command, string args) => { MapWindow.Toggle(); }));
 
         // Tell the UI system that we want our windows to be drawn through the window system
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;

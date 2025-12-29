@@ -2,6 +2,7 @@ using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.FontIdentifier;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
@@ -30,6 +31,7 @@ namespace AkuTrack.Windows;
 
 public class MapWindow : Window, IDisposable
 {
+    private readonly Configuration configuration;
     private readonly ObjTrackManager objTrackManager;
     private readonly UploadManager uploadManager;
     private readonly IDataManager dataManager;
@@ -58,6 +60,7 @@ public class MapWindow : Window, IDisposable
     // The user will see "My Amazing Window" as window title,
     // but for ImGui the ID is "My Amazing Window##With a hidden ID"
     public MapWindow(
+        Configuration configuration,
         ObjTrackManager objTrackManager,
         UploadManager uploadManager,
         IDataManager dataManager,
@@ -68,6 +71,7 @@ public class MapWindow : Window, IDisposable
         )
         : base("AkuTrack - Map##With a hidden ID", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
+        this.configuration = configuration;
         this.log = log;
         this.dataManager = dataManager;
         this.clientState = clientState;
@@ -211,6 +215,18 @@ public class MapWindow : Window, IDisposable
         }
         else
             DrawIcon(60515, obj.pos, obj.r);
+        var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRow(clientState.TerritoryType);
+        var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.Map.Value.MapMarkerRange);
+        foreach (var row in rows)
+        {
+            if (row.X == 0 && row.Y == 0)
+            {
+                continue;
+            }
+            var pos = new Vector2(row.X, row.Y);
+            //log.Debug($"Icon {row.Icon} to {pos} {row.SubrowId} |{row.PlaceNameSubtext.Value.Name}|");
+            DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString());
+        }
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip($"Created: {obj.created_at}\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
@@ -332,6 +348,24 @@ public class MapWindow : Window, IDisposable
         ImGui.SetCursorPos(p);
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
         ImGui.Image(texture.Handle, texture.Size / 2.0f * Scale);
+    }
+
+    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text)
+    {
+        var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
+
+        var p = (position * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
+
+        if(iconid != 0) {
+            ImGui.SetCursorPos(p);
+            //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
+            ImGui.Image(texture.Handle, texture.Size / 2.0f * Scale);
+        }
+        if(text != string.Empty) {
+            ImGui.SetCursorPos(p);
+            log.Debug($"TextColor is {configuration.TextColor}");
+            ImGui.TextColored(configuration.TextColor, text.ToString());
+        }
     }
 
     private void DrawPlayerIcon(Vector3 pos, float rotation)

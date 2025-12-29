@@ -1,26 +1,33 @@
-using System;
-using System.Numerics;
+using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
+using Dalamud.Plugin.Services;
+using Serilog;
+using System;
+using System.Numerics;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace AkuTrack.Windows;
 
 public class ConfigWindow : Window, IDisposable
 {
     private readonly Configuration configuration;
+    private readonly IPluginLog log;
+    private Vector4 color = new();
 
     // We give this window a constant ID using ###.
     // This allows for labels to be dynamic, like "{FPS Counter}fps###XYZ counter window",
     // and the window ID will always be "###XYZ counter window" for ImGui
-    public ConfigWindow(Plugin plugin) : base("A Wonderful Configuration Window###With a constant ID")
+    public ConfigWindow(Configuration configuration, IPluginLog log) : base("A Wonderful Configuration Window###With a constant ID")
     {
-        Flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
+        /*Flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
                 ImGuiWindowFlags.NoScrollWithMouse;
+                */
 
-        Size = new Vector2(232, 90);
+        this.log = log;
+        this.configuration = configuration;
+        Size = new Vector2(232, 200);
         SizeCondition = ImGuiCond.Always;
-
-        configuration = plugin.Configuration;
     }
 
     public void Dispose() { }
@@ -46,6 +53,17 @@ public class ConfigWindow : Window, IDisposable
         {
             configuration.SomePropertyToBeSavedAndWithADefault = configValue;
             // Can save immediately on change if you don't want to provide a "Save and Close" button
+            configuration.Save();
+        }
+
+        //ImGui.ColorEdit4("EINEFARBE##1", (float*)&color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | base_flags);
+
+        ImGui.TextColored(new Vector4(1.0f, 0.0f, 1.0f, 1.0f), "Map Text Color:");
+        ImGui.ColorEdit4("EINEFARBE##1", ref color, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel | ImGuiColorEditFlags.DefaultOptions);
+        if (ImGui.Button("Sef"))
+        {
+            log.Debug($"Set TextColor to {color}");
+            configuration.TextColor = color;
             configuration.Save();
         }
 

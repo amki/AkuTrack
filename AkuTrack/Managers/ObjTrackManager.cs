@@ -95,7 +95,9 @@ namespace AkuTrack.Managers
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion ||
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Housing ||
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament ||
-                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer
+                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer ||
+                    obj.BaseId == 13498 || // Carbuncle
+                    obj.BaseId == 1008 // Eos
                     ) {
                     continue;
                 }
@@ -122,7 +124,7 @@ namespace AkuTrack.Managers
                     var owner = objectTable.SearchById(obj.OwnerId);
                     if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player)
                     {
-                        log.Debug($"Obj {obj.Name} is player owned. Not sending. @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
+                        log.Debug($"Obj {obj.Name} [{obj.BaseId}] is player owned. Not sending. @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
                         continue;
                     } else {
                         seenList.Add(uid, upObj);

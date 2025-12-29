@@ -1,5 +1,6 @@
 using Dalamud.Configuration;
 using System;
+using System.Numerics;
 
 namespace AkuTrack;
 
@@ -10,6 +11,9 @@ public class Configuration : IPluginConfiguration
 
     public bool IsConfigWindowMovable { get; set; } = true;
     public bool SomePropertyToBeSavedAndWithADefault { get; set; } = true;
+
+    public Vector4 TextColor { get; set; } = new Vector4(1.0f, 0.0f, 1.0f, 1.0f);
+
 
     // The below exists just to make saving less cumbersome
     public void Save()
