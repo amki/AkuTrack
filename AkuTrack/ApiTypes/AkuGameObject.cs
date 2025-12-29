@@ -63,9 +63,19 @@ namespace AkuTrack.ApiTypes
         public float hr { get; set; }
         // Only BattleNpc
         public uint? nid { get; set; }
-        public string GetUniqueId()
+        public string? GetUniqueId()
         {
-            string input = $"{t},{bid},{Math.Round(pos.X/10,0)*10},{Math.Round(pos.Y / 10,0) * 10},{Math.Round(pos.Z / 10,0) * 10},{name}";
+            string input = string.Empty;
+            if (t == "EventNpc" || t == "BattleNpc")
+            {
+                input = $"{t},{bid},{Math.Round(pos.X / 10, 0) * 10},{Math.Round(pos.Y / 10, 0) * 10},{Math.Round(pos.Z / 10, 0) * 10},{name}";
+            }
+            else
+            {
+                input = $"{t},{bid},{pos.X},{pos.Y},{pos.Z},{name}";
+            }
+            if (input == string.Empty)
+                return null;
             return CalculateUniqueId(input);
         }
 
@@ -80,9 +90,19 @@ namespace AkuTrack.ApiTypes
             return hashString;
         }
 
-        public static string GetUniqueId(IGameObject o)
+        public static string? GetUniqueId(IGameObject o)
         {
-            string input = $"{o.ObjectKind},{o.BaseId},{Math.Round(o.Position.X/10,0)*10},{Math.Round(o.Position.Y / 10, 0) * 10},{Math.Round(o.Position.Z / 10, 0) * 10},{o.Name.ToString()}";
+            string input = string.Empty;
+            if (o.ObjectKind == ObjectKind.EventNpc || o.ObjectKind == ObjectKind.BattleNpc)
+            {
+                input = $"{o.ObjectKind},{o.BaseId},{Math.Round(o.Position.X / 10, 0) * 10},{Math.Round(o.Position.Y / 10, 0) * 10},{Math.Round(o.Position.Z / 10, 0) * 10},{o.Name.ToString()}";
+            }
+            else
+            {
+                input = $"{o.ObjectKind},{o.BaseId},{o.Position.X},{o.Position.Y},{o.Position.Z},{o.Name.ToString()}";
+            }
+            if (input == string.Empty)
+                return null;
             return CalculateUniqueId(input);
         }
     }
