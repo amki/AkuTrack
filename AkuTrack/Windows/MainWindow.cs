@@ -45,7 +45,7 @@ public class MainWindow : Window, IDisposable
 
     public void Dispose() { }
 
-    public unsafe override void Draw()
+    public override void Draw()
     {
 
         if (ImGui.Button("Clear Seen List"))
@@ -91,13 +91,6 @@ public class MainWindow : Window, IDisposable
                     ImGui.Text($"{y.RowId.ToString()}: {y.AcquisitionType.Value.Text.Value.Text}");
                 }
                 */
-                if (AgentMap.Instance()->SelectedMapBgPath.Length is 0)
-                {
-                    var texture = textureProvider.GetFromGame($"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex").GetWrapOrEmpty();
-
-                    ImGui.Image(texture.Handle, texture.Size);
-                }
-
                 ImGui.Text($"Objects still to upload [{objTrackManager.toUpload.Count}]:");
                 foreach (var o in objTrackManager.toUpload)
                 {

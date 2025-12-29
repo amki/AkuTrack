@@ -27,6 +27,7 @@ public sealed class Plugin : IDalamudPlugin
     public readonly WindowSystem WindowSystem = new("AkuTrack");
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
+    private MapWindow MapWindow { get; init; }
 
     public Plugin(
         IFramework framework,
@@ -56,20 +57,28 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(objectTable)
             .AddSingleton<Configuration>()
             .AddSingleton<MainWindow>()
+            .AddSingleton<MapWindow>()
             .AddSingleton<UploadManager>()
             .AddSingleton<ObjTrackManager>()
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
+        MapWindow = serviceProvider.GetRequiredService<MapWindow>();
 
 
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);
+        WindowSystem.AddWindow(MapWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
             HelpMessage = "A useful message to display in /xlhelp"
         });
+
+        CommandManager.AddHandler("/akum", new CommandInfo((string command, string args) =>
+        {
+            MapWindow.Toggle();
+        }));
 
         // Tell the UI system that we want our windows to be drawn through the window system
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
