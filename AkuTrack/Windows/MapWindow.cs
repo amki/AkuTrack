@@ -363,7 +363,6 @@ public class MapWindow : Window, IDisposable
         }
         if(text != string.Empty) {
             ImGui.SetCursorPos(p);
-            log.Debug($"TextColor is {configuration.TextColor}");
             ImGui.TextColored(configuration.TextColor, text.ToString());
         }
     }
