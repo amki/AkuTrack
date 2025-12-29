@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
 using System.Threading.Channels;
+using System.Security.Cryptography;
 
 namespace AkuTrack.Managers
 {
@@ -21,7 +22,7 @@ namespace AkuTrack.Managers
         private readonly IClientState clientState;
         private readonly UploadManager uploadManager;
 
-        public Dictionary<ulong, IGameObject> seenList = new();
+        public Dictionary<string, AkuGameObject> seenList = new();
         public List<AkuGameObject> toUpload = new();
 
         private TimeSpan lastUpdate = new(0);
@@ -71,14 +72,19 @@ namespace AkuTrack.Managers
             {
                 toUpload.AddRange(ups);
                 var res = await uploadManager.DoUpload("duckit/", toUpload);
-                log.Debug($"Uploading was {res}");
-                if (res) {
+                //log.Debug($"Uploading was {res}");
+                if (res)
+                {
                     toUpload.Clear();
+                }
+                else
+                {
+                    log.Debug($"Uploading failed!");
                 }
             }
         }
 
-        private unsafe List<AkuGameObject> LookForNewObjects()
+        private List<AkuGameObject> LookForNewObjects()
         {
             List<AkuGameObject> objects = new();
             foreach (var obj in objectTable)
@@ -93,33 +99,33 @@ namespace AkuTrack.Managers
                     ) {
                     continue;
                 }
-                if (seenList.ContainsKey(obj.GameObjectId))
+                var uid = AkuGameObject.GetUniqueId(obj);
+                if (seenList.ContainsKey(uid))
                 {
-                    var oldObj = seenList[obj.GameObjectId];
-                    if (oldObj.Position == obj.Position)
-                        continue;
-                    log.Debug($"Known obj {obj.Name} is now @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
-                    seenList[obj.GameObjectId] = obj;
-                } else {
-                    var owner = objectTable.SearchById(obj.OwnerId);
-                    log.Debug($"Found new obj {obj.Name} @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
-                    seenList.Add(obj.GameObjectId, obj);
-                    var upObj = new AkuGameObject(obj);
-                    upObj.mid = clientState.MapId;
-                    upObj.zid = clientState.TerritoryType;
-                    
-                    if (obj is ICharacter c) {
-                        upObj.nid = c.NameId;
-                        FFXIVClientStructs.FFXIV.Client.Game.Character.Character* chr = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)c.Address;
-                        upObj.moid = chr->ModelContainer.ModelCharaId;
-                        upObj.npiid = chr->NamePlateIconId;
+                    var oldObj = seenList[uid];
+                    if(uid != oldObj.GetUniqueId()) {
+                        log.Error($"Something terrible happened! -> Check {uid} but seenList fetches {oldObj.GetUniqueId()}");
                     }
+                    if(obj.ObjectKind.ToString() != oldObj.t || obj.Name.ToString() != oldObj.name || obj.BaseId != oldObj.bid) {
+                        log.Error($"Something terrible happened! oldObj and obj:");
+                        log.Error($"{oldObj.t} || {obj.ObjectKind.ToString()}");
+                        log.Error($"{oldObj.mid} || {clientState.MapId}");
+                        log.Error($"{oldObj.name} || {obj.Name.ToString()}");
+                        log.Error($"{oldObj.bid} || {obj.BaseId}");
+                    }
+                    continue;
+                } else {
+                    //log.Debug($"Found new obj {obj.Name} id: {GenUniqueIdForObj(obj)} @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
+                    var upObj = new AkuGameObject(obj, clientState);
 
+                    // Check if this object is owned by a player (e.g. a battlepet)
+                    var owner = objectTable.SearchById(obj.OwnerId);
                     if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player)
                     {
                         log.Debug($"Obj {obj.Name} is player owned. Not sending. @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
                         continue;
                     } else {
+                        seenList.Add(uid, upObj);
                         objects.Add(upObj);
                     }
                 }

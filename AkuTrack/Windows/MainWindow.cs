@@ -1,3 +1,4 @@
+using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -18,8 +19,6 @@ namespace AkuTrack.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private readonly string goatImagePath;
-    private readonly Plugin plugin;
     private readonly ObjTrackManager objTrackManager;
     private readonly IDataManager dataManager;
     private readonly IClientState clientState;
@@ -94,27 +93,12 @@ public class MainWindow : Window, IDisposable
                 ImGui.Text($"Objects still to upload [{objTrackManager.toUpload.Count}]:");
                 foreach (var o in objTrackManager.toUpload)
                 {
-                    if (ImGui.CollapsingHeader($"[{o.bid}]"))
-                    {
-                        ImGui.Text($"Position: {o.x}/{o.y}/{o.z}");
-
-                    }
+                    DrawAkuGameObject(o);
                 }
                 ImGui.Text($"Seen objects [{objTrackManager.seenList.Count}]:");
                 foreach (var o in objTrackManager.seenList)
                 {
-                    if (ImGui.CollapsingHeader($"[{o.Value.BaseId}] {o.Value.Name}"))
-                    {
-                        ImGui.Text($"BaseId: {o.Value.BaseId}");
-                        //var map = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().FirstOrDefault(m => m.TerritoryType.RowId == clientState.TerritoryType);
-                        //ImGui.Text($"Map: {map.PlaceName.Value.Name}");
-                        ImGui.Text($"Position: {o.Value.Position.ToString()}");
-                        if (o.Value is ICharacter c)
-                        {
-                            ImGui.Text("This is an ICharacter!");
-                            ImGui.Text($"NameId: {c.NameId}");
-                        }
-                    }
+                    DrawAkuGameObject(o.Value);
                 }
                 
                 /*
@@ -133,6 +117,21 @@ public class MainWindow : Window, IDisposable
                     ImGui.Text("Invalid territory.");
                 }
                 */
+            }
+        }
+    }
+
+    private void DrawAkuGameObject(AkuGameObject o) {
+        if (ImGui.CollapsingHeader($"[{o.bid}] {o.name}"))
+        {
+            ImGui.Text($"BaseId: {o.bid}");
+            //var map = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().FirstOrDefault(m => m.TerritoryType.RowId == clientState.TerritoryType);
+            //ImGui.Text($"Map: {map.PlaceName.Value.Name}");
+            ImGui.Text($"Position: {o.pos.ToString()}");
+            if (o is ICharacter c)
+            {
+                ImGui.Text("This is an ICharacter!");
+                ImGui.Text($"NameId: {c.NameId}");
             }
         }
     }

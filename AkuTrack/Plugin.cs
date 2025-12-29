@@ -37,7 +37,8 @@ public sealed class Plugin : IDalamudPlugin
         ITextureProvider textureProvider,
         IChatGui chatGui,
         IPluginLog pluginLog,
-        IObjectTable objectTable)
+        IObjectTable objectTable,
+        ITextureSubstitutionProvider textureSubstitutionProvider)
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
@@ -55,6 +56,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(chatGui)
             .AddSingleton(pluginLog)
             .AddSingleton(objectTable)
+            .AddSingleton(textureSubstitutionProvider)
             .AddSingleton<Configuration>()
             .AddSingleton<MainWindow>()
             .AddSingleton<MapWindow>()

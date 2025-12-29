@@ -30,17 +30,16 @@ namespace AkuTrack.Managers
                 {
                     var str = JsonConvert.SerializeObject(payload);
                     var httpContent = new StringContent(str, Encoding.UTF8, "application/json");
-                    log.Debug($"Sending <{str}> to AkuAPI.");
+                    //log.Debug($"Sending <{str}> to AkuAPI.");
                     var response = await httpClient.PostAsync($"{baseUrl}/{target}", httpContent);
                     if (response.StatusCode == HttpStatusCode.OK)
                     {
-                        log.Debug("Uploaded to AkuAPI.");
                         return true;
                     }
                     else
                     {
                         string responseBody = await response.Content.ReadAsStringAsync();
-                        log.Debug($"Uploaded failed {response.StatusCode}; {responseBody}");
+                        log.Debug($"Upload failed: {responseBody}");
                         return false;
                     }
                 });
