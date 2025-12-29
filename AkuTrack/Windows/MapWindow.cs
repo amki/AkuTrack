@@ -215,6 +215,10 @@ public class MapWindow : Window, IDisposable
         }
         else
             DrawIcon(60515, obj.pos, obj.r);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip($"Created: {obj.created_at}\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
+        }
         var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRow(clientState.TerritoryType);
         var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.Map.Value.MapMarkerRange);
         foreach (var row in rows)
@@ -226,10 +230,6 @@ public class MapWindow : Window, IDisposable
             var pos = new Vector2(row.X, row.Y);
             //log.Debug($"Icon {row.Icon} to {pos} {row.SubrowId} |{row.PlaceNameSubtext.Value.Name}|");
             DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString());
-        }
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip($"Created: {obj.created_at}\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
         }
     }
 
