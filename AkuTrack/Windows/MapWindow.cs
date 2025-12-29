@@ -139,7 +139,7 @@ public class MapWindow : Window, IDisposable
         }
         if (clientState.LocalPlayer is { } localPlayer)
         {
-            DrawIcon(60443, localPlayer.Position, localPlayer.Rotation);
+            DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
         }
         foreach (var o in objTrackManager.seenList)
         {
@@ -293,17 +293,29 @@ public class MapWindow : Window, IDisposable
     private void DrawIcon(int iconid, Vector3 position, float rotation)
     {
         var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
-        //var angle = -rotation + MathF.PI / 2.0f;
-
-
-        //var vectors = GetRotationVectors(angle, position, texture.Size / 2.0f * Scale);
-
 
         var p = ((GetMapCoordinateFor3D(position)) * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
 
         ImGui.SetCursorPos(p);
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
         ImGui.Image(texture.Handle, texture.Size / 2.0f * Scale);
+    }
+
+    private void DrawPlayerIcon(Vector3 pos, float rotation)
+    {
+        var texture = textureProvider.GetFromGameIcon(60443).GetWrapOrEmpty();
+        var angle = -rotation + MathF.PI / 2.0f;
+
+        var p = ImGui.GetWindowPos() +
+                           DrawPosition +
+                           (GetPlayerMapPosition(pos) -
+                            GetMapOffsetVector() +
+                            GetMapCenterOffsetVector()) * Scale;
+        //var p = ((GetMapCoordinateFor3D(pos)) * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
+        var vectors = GetRotationVectors(angle, p, texture.Size / 2.0f * Scale);
+
+        //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
+        ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3]);
     }
 
     private static Vector2[] GetRotationVectors(float angle, Vector2 center, Vector2 size)
@@ -327,6 +339,7 @@ public class MapWindow : Window, IDisposable
         var mapcoord = ((twoD + GetRawMapOffsetVector()) * GetMapScaleFactor()) + GetMapCenterOffsetVector();
         return mapcoord;
     }
+    public static Vector2 GetPlayerMapPosition(Vector3 vec) => new Vector2(vec.X, vec.Z) * GetMapScaleFactor();
     private static Vector2 ImRotate(Vector2 v, float cosA, float sinA) => new(v.X * cosA - v.Y * sinA, v.X * sinA + v.Y * cosA);
 
     /// <summary>
