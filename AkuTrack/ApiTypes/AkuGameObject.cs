@@ -14,6 +14,7 @@ namespace AkuTrack.ApiTypes
     public class AkuGameObject
     {
         public unsafe AkuGameObject(IGameObject obj, IClientState clientState) {
+            this.created_at = DateTimeOffset.Now;
             this.t = obj.ObjectKind.ToString();
             this.pos = obj.Position;
             this.bid = obj.BaseId;
@@ -33,11 +34,12 @@ namespace AkuTrack.ApiTypes
         }
 
         public AkuGameObject(DownloadGameObject dgo) {
+            this.created_at = dgo.created_at;
             this.t = dgo.objecttype;
             this.name = "<downloaded>";
             this.mid = dgo.map_id;
             this.zid = dgo.zone_id;
-            this.pos = new Vector3(dgo.x,dgo.y, dgo.z);
+            this.pos = new Vector3(dgo.x, dgo.y, dgo.z);
             this.r = dgo.rotation;
             this.bid = dgo.base_id;
             this.npiid = dgo.npiid;
@@ -45,6 +47,8 @@ namespace AkuTrack.ApiTypes
             this.hr = dgo.hit_radius;
             this.nid = dgo.nid;
         }
+        [JsonIgnore]
+        public DateTimeOffset created_at { get; set; }
         public string t { get; set; }
         [JsonIgnore]
         public string name { get; set; }
@@ -61,7 +65,7 @@ namespace AkuTrack.ApiTypes
         public uint? nid { get; set; }
         public string GetUniqueId()
         {
-            string input = $"{t},{bid},{pos.X},{pos.Y},{pos.Z},{name}";
+            string input = $"{t},{bid},{Math.Round(pos.X/10,0)*10},{Math.Round(pos.Y / 10,0) * 10},{Math.Round(pos.Z / 10,0) * 10},{name}";
             return CalculateUniqueId(input);
         }
 
@@ -78,7 +82,7 @@ namespace AkuTrack.ApiTypes
 
         public static string GetUniqueId(IGameObject o)
         {
-            string input = $"{o.ObjectKind},{o.BaseId},{o.Position.X},{o.Position.Y},{o.Position.Z},{o.Name.ToString()}";
+            string input = $"{o.ObjectKind},{o.BaseId},{Math.Round(o.Position.X/10,0)*10},{Math.Round(o.Position.Y / 10, 0) * 10},{Math.Round(o.Position.Z / 10, 0) * 10},{o.Name.ToString()}";
             return CalculateUniqueId(input);
         }
     }

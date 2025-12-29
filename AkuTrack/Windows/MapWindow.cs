@@ -30,8 +30,6 @@ namespace AkuTrack.Windows;
 
 public class MapWindow : Window, IDisposable
 {
-    private readonly string goatImagePath;
-    private readonly Plugin plugin;
     private readonly ObjTrackManager objTrackManager;
     private readonly UploadManager uploadManager;
     private readonly IDataManager dataManager;
@@ -197,7 +195,7 @@ public class MapWindow : Window, IDisposable
         else if (obj.t == "Aetheryte")
         {
             var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(obj.bid);
-            if (x.Value.AethernetName.Value.Name.ToString() != string.Empty && x.Value.PlaceName.Value.Name.ToString() == string.Empty)
+            if (x!.Value.AethernetName.Value.Name.ToString() != string.Empty && x.Value.PlaceName.Value.Name.ToString() == string.Empty)
             {
                 DrawIcon(60430, obj.pos, 3.14f);
             }
@@ -209,13 +207,13 @@ public class MapWindow : Window, IDisposable
         else if (obj.t == "GatheringPoint")
         {
             var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().GetRowOrDefault(obj.bid);
-            DrawIcon(x.Value.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r);
+            DrawIcon(x!.Value.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r);
         }
         else
             DrawIcon(60515, obj.pos, obj.r);
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip($"Name: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
+            ImGui.SetTooltip($"Created: {obj.created_at}\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
         }
     }
 

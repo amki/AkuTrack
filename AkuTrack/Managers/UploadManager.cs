@@ -29,12 +29,12 @@ namespace AkuTrack.Managers
             var response = await httpClient.GetAsync($"{baseUrl}/api.php?t=None&mid={mid}&sort=created_at_desc&offset=0");
             var responseBody = await response.Content.ReadAsStringAsync();
             JObject answer = JObject.Parse(responseBody);
-            IList<JToken> results = answer["items"].Children().ToList();
+            IList<JToken> results = answer["items"]!.Children().ToList();
             foreach (JToken res in results)
             {
                 // JToken.ToObject is a helper method that uses JsonSerializer internally
-                DownloadGameObject dgo = res.ToObject<DownloadGameObject>();
-                result.Add(new AkuGameObject(dgo));
+                DownloadGameObject dgo = res.ToObject<DownloadGameObject>()!;
+                result.Add(new AkuGameObject(dgo!));
             }
             log.Debug($"Found {result.Count} downloads.");
             return result;
