@@ -53,6 +53,7 @@ public class MapWindow : Window, IDisposable
     private uint currentMap = 0;
     private uint currentTerritory = 0;
     public float ZoomSpeed = 0.25f;
+    private AkuGameObject? lastClickedObj = null;
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly AkuObjectContextMenu akuObjectContextMenu = new();
@@ -130,7 +131,12 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapElements() {
+        if(lastClickedObj != null)
+            akuObjectContextMenu.Draw(lastClickedObj);
         DrawMapBackground();
+        if(ImGui.Button("Das ist ein kleiner Testknopf mit viel Text!")) {
+            log.Debug("KLIKC");
+        }
         if (ImGui.IsItemHovered())
         {
             HoveredFlags |= HoverFlags.MapTexture;
@@ -303,9 +309,10 @@ public class MapWindow : Window, IDisposable
         }
         else
             DrawIcon(60515, obj.pos, obj.r);
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+        if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
-            ImGui.OpenPopup("AkuTrack_Context_Menu");
+            ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+            lastClickedObj = obj;
         }
         if (ImGui.IsItemHovered())
         {
@@ -380,7 +387,6 @@ public class MapWindow : Window, IDisposable
         }
         ProcessMapDragDragging();
         ProcessMapDragEnd();
-        mapContextMenu.Draw(DrawOffset);
     }
 
     private void ProcessMouseScroll()
@@ -497,7 +503,6 @@ public class MapWindow : Window, IDisposable
         await Task.Run(async () =>
         {
             var objs = await uploadManager.DownloadMapContentFromAPI(mid);
-            log.Debug($"MapWindow: Got objs: {objs}");
             downloadList.Clear();
             foreach (var obj in objs)
             {
@@ -542,6 +547,7 @@ public class MapWindow : Window, IDisposable
                     log.Debug($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
                 }
             }
+            log.Debug($"{downloadList.Count} objects added to downloadList");
         });
     }
 

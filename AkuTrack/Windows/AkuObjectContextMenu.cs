@@ -11,12 +11,12 @@ namespace AkuTrack.Windows
 {
     public class AkuObjectContextMenu
     {
-        public void Draw()
+        public void Draw(AkuGameObject obj)
         {
             using var contextMenu = ImRaii.ContextPopup("AkuTrack_AkuObject_Context_Menu");
             if (!contextMenu) return;
 
-            if (ImGui.MenuItem("Ich bin ein AKUOBJEKT"))
+            if (ImGui.MenuItem($"Ich bin ein AKUOBJEKT {obj.bid}"))
             {
                 Log.Debug("Klick!");
             }
