@@ -137,7 +137,6 @@ public class MapWindow : Window, IDisposable
             HoveredFlags |= HoverFlags.WindowInnerFrame;
         }
         ProcessInputs();
-    
     }
 
     private void DrawMapElements() {
@@ -252,6 +251,10 @@ public class MapWindow : Window, IDisposable
                     ProcessMapDragStart();
                     Flags |= ImGuiWindowFlags.NoMove;
                 }
+            }
+            else
+            {
+                Flags &= ~ImGuiWindowFlags.NoMove;
             }
             ProcessMapDragDragging();
             ProcessMapDragEnd();
@@ -461,7 +464,7 @@ public class MapWindow : Window, IDisposable
     private void ProcessMapDragStart()
     {
         // Don't allow a drag to start if the window size is changing
-        if (ImGui.GetWindowSize() == lastWindowSize)
+        if (ImGui.GetWindowSize() == lastWindowSize && HoveredFlags != HoverFlags.Nothing)
         {
             if (ImGui.IsItemClicked(ImGuiMouseButton.Left) && !isDragStarted)
             {
