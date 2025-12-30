@@ -63,6 +63,13 @@ namespace AkuTrack.ApiTypes
         public float hr { get; set; }
         // Only BattleNpc
         public uint? nid { get; set; }
+        public string? uuid
+        {
+            get
+            {
+                return GetUniqueId();
+            }
+        }
         public string? GetUniqueId()
         {
             string input = string.Empty;

@@ -17,6 +17,7 @@ using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
 using Lumina.Excel.Sheets.Experimental;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Drawing;
@@ -47,14 +48,15 @@ public class MapWindow : Window, IDisposable
     private Vector2 lastWindowSize;
     private bool isDragStarted = false;
     private IDalamudTextureWrap? blendedTexture;
-    private string blendedPath = string.Empty;
+    private string currentPath = string.Empty;
+    private uint currentMap = 0;
+    private uint currentTerritory = 0;
     public float ZoomSpeed = 0.25f;
-    private uint oldMap = 0;
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly AkuObjectContextMenu akuObjectContextMenu = new();
 
-    public Dictionary<string, AkuGameObject> downloadList = new();
+    public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
 
     // We give this window a hidden ID using ##.
     // The user will see "My Amazing Window" as window title,
@@ -145,48 +147,44 @@ public class MapWindow : Window, IDisposable
         {
             HoveredFlags |= HoverFlags.MapTexture;
         }
-        if (clientState.LocalPlayer is { } localPlayer)
+        // Only draw player and from ObjectTable if we are looking at the map we are currently in
+        if (currentMap == clientState.MapId)
         {
-            DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
-        }
-        if(clientState.MapId != oldMap) {
-            log.Debug($"Map has changed, load new data!");
-            oldMap = clientState.MapId;
-            Task.Run(async () =>
+            if (clientState.LocalPlayer is { } localPlayer)
             {
-                var objs = await uploadManager.DownloadMapContentFromAPI(clientState.MapId);
-                log.Debug($"MapWindow: Got objs: {objs}");
-                foreach (var obj in objs)
-                {
-                    downloadList.Add(obj.GetUniqueId(), obj);
-                }
-            });
-
-        }
-        foreach (var o in objTrackManager.seenList)
-        {
-            DrawAkuGameObject(o.Value);
+                DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
+            }
+            foreach (var o in objTrackManager.seenList)
+            {
+                DrawAkuGameObject(o.Value);
+            }
         }
         foreach (var o in downloadList)
         {
             DrawAkuGameObject(o.Value);
         }
-        var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRow(clientState.TerritoryType);
-        var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.Map.Value.MapMarkerRange);
-        foreach (var row in rows)
+        try
         {
-            if (row.X == 0 && row.Y == 0)
+            var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRow(currentTerritory);
+            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.Map.Value.MapMarkerRange);
+            foreach (var row in rows)
             {
-                continue;
+                if (row.X == 0 && row.Y == 0)
+                {
+                    continue;
+                }
+                var pos = new Vector2(row.X, row.Y);
+                //log.Debug($"Icon {row.Icon} to {pos} {row.SubrowId} |{row.PlaceNameSubtext.Value.Name}|");
+                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString());
             }
-            var pos = new Vector2(row.X, row.Y);
-            //log.Debug($"Icon {row.Icon} to {pos} {row.SubrowId} |{row.PlaceNameSubtext.Value.Name}|");
-            DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString());
+        } catch(ArgumentOutOfRangeException e) {
+            // FIXME: How to get markers from region maps?!?
+            //log.Debug($"Could not find Markers for Territory {currentTerritory}");
         }
     }
 
     private void DrawAkuGameObject(AkuGameObject obj) {
-        if (obj.mid != clientState.MapId)
+        if (obj.mid != currentMap)
             return;
         if (obj.t == "EventNpc")
         {
@@ -267,6 +265,20 @@ public class MapWindow : Window, IDisposable
     {
         if (AgentMap.Instance()->SelectedMapBgPath.Length is 0)
         {
+            var gameMapPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
+            if (currentPath != gameMapPath) {
+                log.Debug($"MapWindow: FLAT| Texture switched. oldMid {currentMap} new: {AgentMap.Instance()->SelectedMapId} old: {currentPath} new: {gameMapPath}");
+                if (gameMapPath.Contains("region")) {
+                    log.Debug("REGION MAP DETECTED!");
+                    var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
+                    var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
+                    log.Debug($"BG Path: {vanillaBgPath} sFG Path: {vanillaFgPath}");
+                }
+                currentPath = gameMapPath;
+                currentMap = AgentMap.Instance()->SelectedMapId;
+                currentTerritory = AgentMap.Instance()->SelectedTerritoryId;
+                FetchAkuGameObjectsFromAkuAPI(AgentMap.Instance()->SelectedMapId);
+            }
             var texture = textureProvider.GetFromGame($"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex").GetWrapOrEmpty();
 
             ImGui.SetCursorPos(DrawPosition);
@@ -274,12 +286,17 @@ public class MapWindow : Window, IDisposable
         }
         else
         {
-            if (blendedPath != AgentMap.Instance()->SelectedMapBgPath.ToString())
+            var gameMapPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
+            if (currentPath != gameMapPath)
             {
+                log.Debug($"MapWindow: BLEND| Texture switched. oldMid {currentMap} new: {AgentMap.Instance()->SelectedMapId} old: {currentPath} new: {gameMapPath}");
+                currentPath = gameMapPath;
+                currentMap = AgentMap.Instance()->SelectedMapId;
+                currentTerritory = AgentMap.Instance()->SelectedTerritoryId;
+                FetchAkuGameObjectsFromAkuAPI(AgentMap.Instance()->SelectedMapId);
                 //fogTexture = null;
                 blendedTexture?.Dispose();
                 blendedTexture = LoadTexture();
-                blendedPath = AgentMap.Instance()->SelectedMapBgPath.ToString();
             }
 
             if (blendedTexture is not null)
@@ -385,6 +402,21 @@ public class MapWindow : Window, IDisposable
 
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
         ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3]);
+    }
+
+    private async void FetchAkuGameObjectsFromAkuAPI(uint mid) {
+        await Task.Run(async () =>
+        {
+            var objs = await uploadManager.DownloadMapContentFromAPI(mid);
+            log.Debug($"MapWindow: Got objs: {objs}");
+            downloadList.Clear();
+            foreach (var obj in objs)
+            {
+                if(!downloadList.TryAdd(obj.GetUniqueId(), obj)) {
+                    log.Debug($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
+                }
+            }
+        });
     }
 
     private static Vector2[] GetRotationVectors(float angle, Vector2 center, Vector2 size)

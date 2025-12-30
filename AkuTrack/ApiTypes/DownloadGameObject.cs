@@ -26,5 +26,6 @@ namespace AkuTrack.ApiTypes
         public float y { get; set; }
         public float z { get; set; }
         public float rotation { get; set; }
+        public string uuid { get; set; }
     }
 }

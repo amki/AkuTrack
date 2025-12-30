@@ -25,19 +25,47 @@ namespace AkuTrack.Managers
         }
 
         public async Task<List<AkuGameObject>> DownloadMapContentFromAPI(uint mid) {
+            var queryUrl = $"{baseUrl}/api.php?t=None&mid={mid}&sort=created_at_desc&offset=0";
+            log.Debug($"AkuAPI Download: Querying {queryUrl}");
             var result = new List<AkuGameObject>();
-            var response = await httpClient.GetAsync($"{baseUrl}/api.php?t=None&mid={mid}&sort=created_at_desc&offset=0");
+            var response = await httpClient.GetAsync(queryUrl);
             var responseBody = await response.Content.ReadAsStringAsync();
-            JObject answer = JObject.Parse(responseBody);
-            IList<JToken> results = answer["items"]!.Children().ToList();
-            foreach (JToken res in results)
+            try
             {
-                // JToken.ToObject is a helper method that uses JsonSerializer internally
-                DownloadGameObject dgo = res.ToObject<DownloadGameObject>()!;
-                result.Add(new AkuGameObject(dgo!));
+                JObject answer = JObject.Parse(responseBody);
+                if (answer == null)
+                {
+                    log.Debug($"AkuAPI Download: Answer was null?");
+                    log.Debug($"AkuAPI Download: response: {responseBody}");
+                    return result;
+                }
+                if (!answer.ContainsKey("items"))
+                {
+                    log.Debug($"AkuAPI Download: No items ins answer?");
+                    log.Debug($"AkuAPI Download: response: {responseBody}");
+                    return result;
+                }
+                IList<JToken> results = answer["items"]!.Children().ToList();
+                foreach (JToken res in results)
+                {
+                    // JToken.ToObject is a helper method that uses JsonSerializer internally
+                    var dgo = res.ToObject<DownloadGameObject>();
+                    if (dgo != null)
+                    {
+                        result.Add(new AkuGameObject(dgo));
+                    }
+                    else
+                    {
+                        log.Debug($"AkuAPI Download: Could not deserialize DownloadGameObject!");
+                    }
+                }
+                log.Debug($"AkuAPI Download: Found {result.Count} downloads.");
+                return result;
+            } catch(JsonReaderException e) {
+                log.Debug($"AkuAPI Download: Could not read from JsonReader.");
+                log.Debug($"AkuAPI Download: response: {responseBody}");
+                return result;
             }
-            log.Debug($"Found {result.Count} downloads.");
-            return result;
         }
 
         public async Task<bool> DoUpload(string target, List<AkuGameObject> payload)
