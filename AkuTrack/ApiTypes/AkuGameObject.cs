@@ -35,6 +35,7 @@ namespace AkuTrack.ApiTypes
 
         public AkuGameObject(DownloadGameObject dgo) {
             this.created_at = dgo.created_at;
+            this.lastseen_at = dgo.last_seen_at;
             this.t = dgo.objecttype;
             this.name = "<downloaded>";
             this.mid = dgo.map_id;
@@ -48,7 +49,9 @@ namespace AkuTrack.ApiTypes
             this.nid = dgo.nid;
         }
         [JsonIgnore]
-        public DateTimeOffset created_at { get; set; }
+        public DateTimeOffset? created_at { get; set; }
+        [JsonIgnore]
+        public DateTimeOffset? lastseen_at { get; set; }
         public string t { get; set; }
         [JsonIgnore]
         public string name { get; set; }

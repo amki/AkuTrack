@@ -1,6 +1,7 @@
 using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.FontIdentifier;
@@ -226,7 +227,7 @@ public class MapWindow : Window, IDisposable
             DrawIcon(60515, obj.pos, obj.r);
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip($"Created: {obj.created_at}\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
+            ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
         }
     }
 
@@ -407,12 +408,41 @@ public class MapWindow : Window, IDisposable
     private async void FetchAkuGameObjectsFromAkuAPI(uint mid) {
         await Task.Run(async () =>
         {
-            var objs = await uploadManager.DownloadMapContentFromAPI(mid);
-            log.Debug($"MapWindow: Got objs: {objs}");
-            downloadList.Clear();
-            foreach (var obj in objs)
-            {
-                if(!downloadList.TryAdd(obj.GetUniqueId(), obj)) {
+        var objs = await uploadManager.DownloadMapContentFromAPI(mid);
+        log.Debug($"MapWindow: Got objs: {objs}");
+        downloadList.Clear();
+        foreach (var obj in objs)
+        {
+                if (obj.t == "EventNpc") {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
+                        obj.name = y.Singular.ToString();
+                    } catch(ArgumentOutOfRangeException e ) {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
+                    }
+                }
+                if(obj.t == "BattleNpc") {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
+                        obj.name = y.Singular.ToString();
+                    } catch(ArgumentOutOfRangeException e ) {
+                        log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
+                    }
+                }
+                if(obj.t == "EventObj") {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
+                        obj.name = y.Singular.ToString();
+                    }
+                    catch (ArgumentOutOfRangeException e)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
+                    }
+                }
+                if (!downloadList.TryAdd(obj.GetUniqueId(), obj)) {
                     log.Debug($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
                 }
             }

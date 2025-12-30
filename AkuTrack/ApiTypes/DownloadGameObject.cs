@@ -14,6 +14,7 @@ namespace AkuTrack.ApiTypes
     public class DownloadGameObject
     {
         public DateTimeOffset created_at { get; set; }
+        public DateTimeOffset last_seen_at { get; set; }
         public string objecttype { get; set; }
         public uint zone_id { get; set; }
         public uint map_id { get; set; }
