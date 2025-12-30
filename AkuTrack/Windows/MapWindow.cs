@@ -91,19 +91,6 @@ public class MapWindow : Window, IDisposable
 
     public void Dispose() { }
 
-    public static bool IsBoundedBy(Vector2 cursor, Vector2 minBounds, Vector2 maxBounds)
-    {
-        if (cursor.X >= minBounds.X && cursor.Y >= minBounds.Y)
-        {
-            if (cursor.X <= maxBounds.X && cursor.Y <= maxBounds.Y)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     public unsafe override void Draw()
     {
         UpdateDrawOffset();
@@ -184,92 +171,16 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void DrawAkuGameObject(AkuGameObject obj) {
-        if (obj.mid != currentMap)
-            return;
-        if (obj.t == "EventNpc")
-        {
-            DrawIcon(60424, obj.pos, obj.r);
-        }
-        else if (obj.t == "EventObj")
-        {
-            if (obj.bid == 2000401)
-                DrawIcon(60425, obj.pos, obj.r);
-            else if (obj.bid == 2000402)
-                DrawIcon(60570, obj.pos, obj.r);
-            else if (obj.bid == 2000470)
-                DrawIcon(60460, obj.pos, obj.r);
-            else
-                DrawIcon(60353, obj.pos, obj.r);
-        }
-        else if (obj.t == "BattleNpc")
-        {
-            DrawIcon(60422, obj.pos, obj.r);
-        }
-        else if (obj.t == "Aetheryte")
-        {
-            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(obj.bid);
-            if (x!.Value.AethernetName.Value.Name.ToString() != string.Empty && x.Value.PlaceName.Value.Name.ToString() == string.Empty)
-            {
-                DrawIcon(60430, obj.pos, 3.14f);
-            }
-            else
-            {
-                DrawIcon(60453, obj.pos, 3.14f);
-            }
-        }
-        else if (obj.t == "GatheringPoint")
-        {
-            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().GetRowOrDefault(obj.bid);
-            DrawIcon(x!.Value.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r);
-        }
-        else
-            DrawIcon(60515, obj.pos, obj.r);
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
-        }
-    }
-
-    private void ProcessInputs() {
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
-        {
-            ImGui.OpenPopup("AkuTrack_Context_Menu");
-        }
-        else
-        {
-            if (HoveredFlags.Any())
-            {
-                if (ImGui.GetIO().KeyShift)
-                {
-                    Flags &= ~ImGuiWindowFlags.NoMove;
-                }
-                else
-                {
-                    ProcessMouseScroll();
-                    ProcessMapDragStart();
-                    Flags |= ImGuiWindowFlags.NoMove;
-                }
-            }
-            else
-            {
-                Flags &= ~ImGuiWindowFlags.NoMove;
-            }
-            ProcessMapDragDragging();
-            ProcessMapDragEnd();
-        }
-        mapContextMenu.Draw(DrawOffset);
-    }
-
-
     private unsafe void DrawMapBackground()
     {
         if (AgentMap.Instance()->SelectedMapBgPath.Length is 0)
         {
             var gameMapPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
-            if (currentPath != gameMapPath) {
+            if (currentPath != gameMapPath)
+            {
                 log.Debug($"MapWindow: FLAT| Texture switched. oldMid {currentMap} new: {AgentMap.Instance()->SelectedMapId} old: {currentPath} new: {gameMapPath}");
-                if (gameMapPath.Contains("region")) {
+                if (gameMapPath.Contains("region"))
+                {
                     log.Debug("REGION MAP DETECTED!");
                     var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
                     var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
@@ -339,7 +250,6 @@ public class MapWindow : Window, IDisposable
         return textureProvider.CreateFromRaw(RawImageSpecification.Rgba32(2048, 2048), backgroundBytes);
     }
 
-
     private TexFile? GetTexFile(string rawPath)
     {
         var path = textureSubstitutionProvider.GetSubstitutedPath(rawPath);
@@ -352,12 +262,55 @@ public class MapWindow : Window, IDisposable
         return dataManager.GetFile<TexFile>(path);
     }
 
-    private void UpdateDrawOffset()
-    {
-        var childCenterOffset = ImGui.GetContentRegionAvail() / 2.0f;
-        var mapCenterOffset = new Vector2(1024.0f, 1024.0f) * Scale;
-
-        DrawPosition = childCenterOffset - mapCenterOffset + DrawOffset * Scale;
+    private void DrawAkuGameObject(AkuGameObject obj) {
+        if (obj.mid != currentMap)
+            return;
+        if (obj.t == "EventNpc")
+        {
+            DrawIcon(60424, obj.pos, obj.r);
+        }
+        else if (obj.t == "EventObj")
+        {
+            if (obj.bid == 2000401)
+                DrawIcon(60425, obj.pos, obj.r);
+            else if (obj.bid == 2000402)
+                DrawIcon(60570, obj.pos, obj.r);
+            else if (obj.bid == 2000470)
+                DrawIcon(60460, obj.pos, obj.r);
+            else
+                DrawIcon(60353, obj.pos, obj.r);
+        }
+        else if (obj.t == "BattleNpc")
+        {
+            DrawIcon(60422, obj.pos, obj.r);
+        }
+        else if (obj.t == "Aetheryte")
+        {
+            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(obj.bid);
+            if (x!.Value.AethernetName.Value.Name.ToString() != string.Empty && x.Value.PlaceName.Value.Name.ToString() == string.Empty)
+            {
+                DrawIcon(60430, obj.pos, 3.14f);
+            }
+            else
+            {
+                DrawIcon(60453, obj.pos, 3.14f);
+            }
+        }
+        else if (obj.t == "GatheringPoint")
+        {
+            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().GetRowOrDefault(obj.bid);
+            DrawIcon(x!.Value.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r);
+        }
+        else
+            DrawIcon(60515, obj.pos, obj.r);
+        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+        {
+            ImGui.OpenPopup("AkuTrack_Context_Menu");
+        }
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
+        }
     }
 
     private void DrawIcon(int iconid, Vector3 position, float rotation)
@@ -377,12 +330,14 @@ public class MapWindow : Window, IDisposable
 
         var p = (position * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
 
-        if(iconid != 0) {
+        if (iconid != 0)
+        {
             ImGui.SetCursorPos(p);
             //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
             ImGui.Image(texture.Handle, texture.Size / 2.0f * Scale);
         }
-        if(text != string.Empty) {
+        if (text != string.Empty)
+        {
             ImGui.SetCursorPos(p);
             ImGui.TextColored(configuration.TextColor, text.ToString());
         }
@@ -405,48 +360,79 @@ public class MapWindow : Window, IDisposable
         ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3]);
     }
 
-    private async void FetchAkuGameObjectsFromAkuAPI(uint mid) {
-        await Task.Run(async () =>
+    private void ProcessInputs() {
+        if (HoveredFlags.Any())
         {
-        var objs = await uploadManager.DownloadMapContentFromAPI(mid);
-        log.Debug($"MapWindow: Got objs: {objs}");
-        downloadList.Clear();
-        foreach (var obj in objs)
-        {
-                if (obj.t == "EventNpc") {
-                    try
-                    {
-                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
-                        obj.name = y.Singular.ToString();
-                    } catch(ArgumentOutOfRangeException e ) {
-                        log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
-                    }
-                }
-                if(obj.t == "BattleNpc") {
-                    try
-                    {
-                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
-                        obj.name = y.Singular.ToString();
-                    } catch(ArgumentOutOfRangeException e ) {
-                        log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
-                    }
-                }
-                if(obj.t == "EventObj") {
-                    try
-                    {
-                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
-                        obj.name = y.Singular.ToString();
-                    }
-                    catch (ArgumentOutOfRangeException e)
-                    {
-                        log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
-                    }
-                }
-                if (!downloadList.TryAdd(obj.GetUniqueId(), obj)) {
-                    log.Debug($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
-                }
+            if (ImGui.GetIO().KeyShift)
+            {
+                Flags &= ~ImGuiWindowFlags.NoMove;
             }
-        });
+            else
+            {
+                ProcessMouseScroll();
+                ProcessMapDragStart();
+                Flags |= ImGuiWindowFlags.NoMove;
+            }
+        }
+        else
+        {
+            Flags &= ~ImGuiWindowFlags.NoMove;
+        }
+        ProcessMapDragDragging();
+        ProcessMapDragEnd();
+        mapContextMenu.Draw(DrawOffset);
+    }
+
+    private void ProcessMouseScroll()
+    {
+        if (ImGui.GetIO().MouseWheel is 0) return;
+        if (!HoveredFlags.HasFlag(HoverFlags.WindowInnerFrame)) return;
+
+        Scale += ZoomSpeed * ImGui.GetIO().MouseWheel;
+        Scale = Math.Clamp(Scale, 0.25f, 100.0f);
+    }
+
+    private void ProcessMapDragStart()
+    {
+        // Don't allow a drag to start if the window size is changing
+        if (ImGui.GetWindowSize() == lastWindowSize && HoveredFlags != HoverFlags.Nothing)
+        {
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Left) && !isDragStarted)
+            {
+                isDragStarted = true;
+                //System.SystemConfig.FollowPlayer = false;
+            }
+        }
+        else
+        {
+            lastWindowSize = ImGui.GetWindowSize();
+            isDragStarted = false;
+        }
+    }
+
+    private void ProcessMapDragDragging()
+    {
+        if (ImGui.IsMouseDragging(ImGuiMouseButton.Left) && isDragStarted)
+        {
+            DrawOffset += ImGui.GetMouseDragDelta() / Scale;
+            ImGui.ResetMouseDragDelta();
+        }
+    }
+
+    private void ProcessMapDragEnd()
+    {
+        if (ImGui.IsMouseReleased(ImGuiMouseButton.Left))
+        {
+            isDragStarted = false;
+        }
+    }
+
+    private void UpdateDrawOffset()
+    {
+        var childCenterOffset = ImGui.GetContentRegionAvail() / 2.0f;
+        var mapCenterOffset = new Vector2(1024.0f, 1024.0f) * Scale;
+
+        DrawPosition = childCenterOffset - mapCenterOffset + DrawOffset * Scale;
     }
 
     private static Vector2[] GetRotationVectors(float angle, Vector2 center, Vector2 size)
@@ -493,51 +479,70 @@ public class MapWindow : Window, IDisposable
     /// </summary>
     public static Vector2 GetMapCenterOffsetVector() => new(1024.0f, 1024.0f);
 
-    /// <summary>
-    /// Offset for the top left corner of the drawn map
-    /// </summary>
-    public static Vector2 GetCombinedOffsetVector() => -GetMapOffsetVector() + GetMapCenterOffsetVector();
-
-    private void ProcessMouseScroll()
+    public static bool IsBoundedBy(Vector2 cursor, Vector2 minBounds, Vector2 maxBounds)
     {
-        if (ImGui.GetIO().MouseWheel is 0) return;
-        if (!HoveredFlags.HasFlag(HoverFlags.WindowInnerFrame)) return;
-
-        Scale += ZoomSpeed * ImGui.GetIO().MouseWheel;
-        Scale = Math.Clamp(Scale, 0.25f, 100.0f);
-    }
-    private void ProcessMapDragDragging()
-    {
-        if (ImGui.IsMouseDragging(ImGuiMouseButton.Left) && isDragStarted)
+        if (cursor.X >= minBounds.X && cursor.Y >= minBounds.Y)
         {
-            DrawOffset += ImGui.GetMouseDragDelta() / Scale;
-            ImGui.ResetMouseDragDelta();
-        }
-    }
-
-    private void ProcessMapDragEnd()
-    {
-        if (ImGui.IsMouseReleased(ImGuiMouseButton.Left))
-        {
-            isDragStarted = false;
-        }
-    }
-
-    private void ProcessMapDragStart()
-    {
-        // Don't allow a drag to start if the window size is changing
-        if (ImGui.GetWindowSize() == lastWindowSize && HoveredFlags != HoverFlags.Nothing)
-        {
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Left) && !isDragStarted)
+            if (cursor.X <= maxBounds.X && cursor.Y <= maxBounds.Y)
             {
-                isDragStarted = true;
-                //System.SystemConfig.FollowPlayer = false;
+                return true;
             }
         }
-        else
-        {
-            lastWindowSize = ImGui.GetWindowSize();
-            isDragStarted = false;
-        }
+
+        return false;
     }
+
+    private async void FetchAkuGameObjectsFromAkuAPI(uint mid)
+    {
+        await Task.Run(async () =>
+        {
+            var objs = await uploadManager.DownloadMapContentFromAPI(mid);
+            log.Debug($"MapWindow: Got objs: {objs}");
+            downloadList.Clear();
+            foreach (var obj in objs)
+            {
+                if (obj.t == "EventNpc")
+                {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
+                        obj.name = y.Singular.ToString();
+                    }
+                    catch (ArgumentOutOfRangeException e)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
+                    }
+                }
+                if (obj.t == "BattleNpc")
+                {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
+                        obj.name = y.Singular.ToString();
+                    }
+                    catch (ArgumentOutOfRangeException e)
+                    {
+                        log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
+                    }
+                }
+                if (obj.t == "EventObj")
+                {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
+                        obj.name = y.Singular.ToString();
+                    }
+                    catch (ArgumentOutOfRangeException e)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
+                    }
+                }
+                if (!downloadList.TryAdd(obj.GetUniqueId(), obj))
+                {
+                    log.Debug($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
+                }
+            }
+        });
+    }
+
 }
