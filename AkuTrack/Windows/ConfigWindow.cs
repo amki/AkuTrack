@@ -48,10 +48,10 @@ public class ConfigWindow : Window, IDisposable
     public override void Draw()
     {
         // Can't ref a property, so use a local copy
-        var configValue = configuration.SomePropertyToBeSavedAndWithADefault;
-        if (ImGui.Checkbox("Random Config Bool", ref configValue))
+        var configValue = configuration.DrawDebugSquares;
+        if (ImGui.Checkbox("Draw debug squares?", ref configValue))
         {
-            configuration.SomePropertyToBeSavedAndWithADefault = configValue;
+            configuration.DrawDebugSquares = configValue;
             // Can save immediately on change if you don't want to provide a "Save and Close" button
             configuration.Save();
         }

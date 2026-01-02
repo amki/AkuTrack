@@ -102,6 +102,10 @@ namespace AkuTrack.Managers
                     continue;
                 }
                 var uid = AkuGameObject.GetUniqueId(obj);
+                if(uid == null ) {
+                    log.Debug($"ERROR: Could not GetUniqueId from obj.bid {obj.BaseId} name {obj.Name}");
+                    continue;
+                }
                 if (seenList.ContainsKey(uid))
                 {
                     var oldObj = seenList[uid];

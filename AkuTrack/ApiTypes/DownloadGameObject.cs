@@ -15,7 +15,7 @@ namespace AkuTrack.ApiTypes
     {
         public DateTimeOffset created_at { get; set; }
         public DateTimeOffset last_seen_at { get; set; }
-        public string objecttype { get; set; }
+        public required string objecttype { get; set; }
         public uint zone_id { get; set; }
         public uint map_id { get; set; }
         public uint base_id { get; set; }
@@ -27,6 +27,6 @@ namespace AkuTrack.ApiTypes
         public float y { get; set; }
         public float z { get; set; }
         public float rotation { get; set; }
-        public string uuid { get; set; }
+        public required string uuid { get; set; }
     }
 }

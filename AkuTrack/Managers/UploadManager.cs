@@ -61,7 +61,7 @@ namespace AkuTrack.Managers
                 }
                 log.Debug($"AkuAPI Download: Found {result.Count} downloads.");
                 return result;
-            } catch(JsonReaderException e) {
+            } catch(JsonReaderException) {
                 log.Debug($"AkuAPI Download: Could not read from JsonReader.");
                 log.Debug($"AkuAPI Download: response: {responseBody}");
                 return result;

@@ -62,6 +62,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<MapWindow>()
             .AddSingleton<UploadManager>()
             .AddSingleton<ObjTrackManager>()
+            .AddSingleton<BottomBar>()
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
@@ -79,6 +80,7 @@ public sealed class Plugin : IDalamudPlugin
         });
 
         CommandManager.AddHandler("/akum", new CommandInfo((string command, string args) => { MapWindow.Toggle(); }));
+        CommandManager.AddHandler("/akuc", new CommandInfo((string command, string args) => { ConfigWindow.Toggle(); }));
 
         // Tell the UI system that we want our windows to be drawn through the window system
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;

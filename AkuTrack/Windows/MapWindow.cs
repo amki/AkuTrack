@@ -17,6 +17,7 @@ using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
 using Lumina.Excel.Sheets.Experimental;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -57,6 +58,7 @@ public class MapWindow : Window, IDisposable
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly AkuObjectContextMenu akuObjectContextMenu = new();
+    private readonly BottomBar bottomBar;
 
     public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
 
@@ -67,6 +69,7 @@ public class MapWindow : Window, IDisposable
         Configuration configuration,
         ObjTrackManager objTrackManager,
         UploadManager uploadManager,
+        BottomBar bottomBar,
         IDataManager dataManager,
         IClientState clientState,
         ITextureProvider textureProvider,
@@ -81,6 +84,7 @@ public class MapWindow : Window, IDisposable
         this.clientState = clientState;
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
+        this.bottomBar = bottomBar;
         this.textureProvider = textureProvider;
         this.textureSubstitutionProvider = textureSubstitutionProvider;
         SizeConstraints = new WindowSizeConstraints
@@ -134,13 +138,13 @@ public class MapWindow : Window, IDisposable
         if(lastClickedObj != null)
             akuObjectContextMenu.Draw(lastClickedObj);
         DrawMapBackground();
-        if(ImGui.Button("Das ist ein kleiner Testknopf mit viel Text!")) {
-            log.Debug("KLIKC");
-        }
         if (ImGui.IsItemHovered())
         {
             HoveredFlags |= HoverFlags.MapTexture;
         }
+        
+        bottomBar.Draw();
+        
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
         if (currentMap == clientState.MapId)
         {
@@ -159,8 +163,8 @@ public class MapWindow : Window, IDisposable
         }
         try
         {
-            var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRow(currentTerritory);
-            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.Map.Value.MapMarkerRange);
+            var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().GetRow(currentMap);
+            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.MapMarkerRange);
             foreach (var row in rows)
             {
                 if (row.X == 0 && row.Y == 0)
@@ -168,10 +172,10 @@ public class MapWindow : Window, IDisposable
                     continue;
                 }
                 var pos = new Vector2(row.X, row.Y);
-                //log.Debug($"Icon {row.Icon} to {pos} {row.SubrowId} |{row.PlaceNameSubtext.Value.Name}|");
-                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString());
+                //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
+                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
             }
-        } catch(ArgumentOutOfRangeException e) {
+        } catch(ArgumentOutOfRangeException) {
             // FIXME: How to get markers from region maps?!?
             //log.Debug($"Could not find Markers for Territory {currentTerritory}");
         }
@@ -331,23 +335,76 @@ public class MapWindow : Window, IDisposable
         ImGui.Image(texture.Handle, texture.Size / 2.0f * Scale);
     }
 
-    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text)
+    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation)
     {
+        if (IsDoubleHousingArea(iconid))
+            return;
         var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
-
-        var p = (position * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
-
-        if (iconid != 0)
-        {
-            ImGui.SetCursorPos(p);
             //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
-            ImGui.Image(texture.Handle, texture.Size / 2.0f * Scale);
-        }
-        if (text != string.Empty)
-        {
+        if (IsRegionIcon(iconid)) {
+            var regionScaleFactor = 0.84f;
+            // FIXME: Rendering of region icons is somewhat broken
+            var p = (position * Scale) + DrawPosition - (texture.Size * regionScaleFactor / 4.0f * Scale);
             ImGui.SetCursorPos(p);
-            ImGui.TextColored(configuration.TextColor, text.ToString());
+            ImGui.Image(texture.Handle, texture.Size * regionScaleFactor / 2.0f * Scale);
+            if(configuration.DrawDebugSquares) {
+                ImGui.SetCursorPos(p);
+                var cursorPos = ImGui.GetCursorScreenPos();
+                ImGui.GetWindowDrawList().AddRect(cursorPos, cursorPos + (texture.Size * regionScaleFactor / 2.0f * Scale), ImGui.GetColorU32(configuration.TextColor), 3.0f);
+            }
+            if (text != string.Empty)
+            {
+                var ap = p + (texture.Size * regionScaleFactor / 4.0f * Scale);
+                ImGui.SetCursorPos(ap);
+                ImGui.TextColored(configuration.TextColor, text.ToString());
+            }
+        } else {
+            var p = (position * Scale) + DrawPosition - (texture.Size / 4.0f);
+            ImGui.SetCursorPos(p);
+            ImGui.Image(texture.Handle, texture.Size / 2.0f);
+            if(configuration.DrawDebugSquares)
+            {
+                ImGui.SetCursorPos(p);
+                var cursorPos = ImGui.GetCursorScreenPos();
+                ImGui.GetWindowDrawList().AddRect(cursorPos, cursorPos + (texture.Size / 2.0f), ImGui.GetColorU32(configuration.TextColor), 3.0f);
+            }
+            if (text != string.Empty)
+            {
+                var ap = p;
+                /*
+                switch(subtextOrientation) {
+                    case 1:
+                        ap.Y += texture.Size.Y / 2.0f / 4.0f;
+                        break;
+                    case 2:
+                        ap.Y += texture.Size.Y / 2.0f / 4.0f;
+                        break;
+                    case 3:
+                        break;
+                    case 4:
+                        break;
+                    default:
+                        break;
+                }
+                */
+                ImGui.SetCursorPos(ap);
+                ImGui.TextColored(configuration.TextColor, text.ToString());
+            }
         }
+    }
+
+    public static bool IsRegionIcon(int iconId) =>
+       iconId switch
+       {
+           >= 63200 and < 63900 => true,
+           >= 62620 and < 62800 => true,
+           _ => false,
+       };
+
+    public static bool IsDoubleHousingArea(int iconId) {
+        if (iconId == 63249 /* Goblet */ || iconId == 63210 /* Mist */ || iconId == 63228 /* Lavender Beds */ || iconId == 63383 /* Shirogane */)
+            return true;
+        return false;
     }
 
     private void DrawPlayerIcon(Vector3 pos, float rotation)
@@ -513,19 +570,21 @@ public class MapWindow : Window, IDisposable
                         var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
                         obj.name = y.Singular.ToString();
                     }
-                    catch (ArgumentOutOfRangeException e)
+                    catch (ArgumentOutOfRangeException)
                     {
                         log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
                     }
                 }
                 if (obj.t == "BattleNpc")
                 {
+                    if (obj.nid == null)
+                        continue;
                     try
                     {
                         var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
                         obj.name = y.Singular.ToString();
                     }
-                    catch (ArgumentOutOfRangeException e)
+                    catch (ArgumentOutOfRangeException)
                     {
                         log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
                     }
@@ -537,12 +596,16 @@ public class MapWindow : Window, IDisposable
                         var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
                         obj.name = y.Singular.ToString();
                     }
-                    catch (ArgumentOutOfRangeException e)
+                    catch (ArgumentOutOfRangeException)
                     {
                         log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
                     }
                 }
-                if (!downloadList.TryAdd(obj.GetUniqueId(), obj))
+                if(obj.GetUniqueId() == null) {
+                    log.Debug($"ERROR: Could not GetUniqueId of obj.bid {obj.bid} name {obj.name}");
+                    continue;
+                }
+                if (!downloadList.TryAdd(obj.GetUniqueId()!, obj))
                 {
                     log.Debug($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
                 }
