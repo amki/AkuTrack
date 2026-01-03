@@ -54,6 +54,7 @@ public class MapWindow : Window, IDisposable
     private uint currentMap = 0;
     private uint currentTerritory = 0;
     public float ZoomSpeed = 0.25f;
+    private Vector2 currentMapPixelSize = new(0, 0);
     private AkuGameObject? lastClickedObj = null;
 
     private readonly MapContextMenu mapContextMenu = new();
@@ -99,14 +100,6 @@ public class MapWindow : Window, IDisposable
     public unsafe override void Draw()
     {
         UpdateDrawOffset();
-        /*
-        var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.TripleTriadCardResident>().ToList();
-        ImGui.Text("TripleTriadCardResident");
-        foreach (var y in x)
-        {
-            ImGui.Text($"{y.RowId.ToString()}: {y.AcquisitionType.Value.Text.Value.Text}");
-        }
-        */
 
         HoveredFlags = HoverFlags.Nothing;
 
@@ -119,11 +112,12 @@ public class MapWindow : Window, IDisposable
         {
             
             DrawMapElements();
+            currentMapPixelSize = ImGui.GetWindowSize();
 
             // Reset Draw Position for Overlay Extras
             ImGui.SetCursorPos(Vector2.Zero);
             //DrawToolbar();
-            //DrawCoordinateBar();
+            bottomBar.Draw(HoveredFlags.HasFlag(HoverFlags.MapTexture), currentMapPixelSize, DrawPosition, DrawOffset, Scale);
         }
 
 
@@ -142,8 +136,6 @@ public class MapWindow : Window, IDisposable
         {
             HoveredFlags |= HoverFlags.MapTexture;
         }
-        
-        bottomBar.Draw();
         
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
         if (currentMap == clientState.MapId)
@@ -495,7 +487,7 @@ public class MapWindow : Window, IDisposable
         var childCenterOffset = ImGui.GetContentRegionAvail() / 2.0f;
         var mapCenterOffset = new Vector2(1024.0f, 1024.0f) * Scale;
 
-        DrawPosition = childCenterOffset - mapCenterOffset + DrawOffset * Scale;
+        DrawPosition = childCenterOffset - mapCenterOffset + (DrawOffset * Scale);
     }
 
     private static Vector2[] GetRotationVectors(float angle, Vector2 center, Vector2 size)
