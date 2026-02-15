@@ -7,7 +7,6 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO;
-using static FFXIVClientStructs.FFXIV.Client.UI.AddonActionCross;
 
 namespace AkuTrack;
 
@@ -76,11 +75,15 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "A useful message to display in /xlhelp"
+            HelpMessage = "Opens the main menu with debug information."
         });
 
-        CommandManager.AddHandler("/akum", new CommandInfo((string command, string args) => { MapWindow.Toggle(); }));
-        CommandManager.AddHandler("/akuc", new CommandInfo((string command, string args) => { ConfigWindow.Toggle(); }));
+        CommandManager.AddHandler("/akum", new CommandInfo((string command, string args) => { MapWindow.Toggle(); }) {
+            HelpMessage = "Opens the map window."
+        });
+        CommandManager.AddHandler("/akuc", new CommandInfo((string command, string args) => { ConfigWindow.Toggle(); }) {
+            HelpMessage = "Opens the configuration window."
+        });
 
         // Tell the UI system that we want our windows to be drawn through the window system
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
