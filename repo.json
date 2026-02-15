@@ -3,18 +3,15 @@
     "Author": "Enthusiastus",
     "Name": "AkuTrack",
     "InternalName": "AkuTrack",
-    "Description": "Tracks GameObjects and sends them to Akurosia Kamo",
-    "AssemblyVersion": "0.0.29",
-    "TestingAssemblyVersion": "0.0.29",
+    "Description": "Shows an improved ingame (and outgame map) and collects the seen information to display later.",
+    "AssemblyVersion": "0.0.28",
+    "TestingAssemblyVersion": "0.0.28",
     "RepoUrl": "https://github.com/amki/AkuTrack",
     "IconUrl": "https://raw.githubusercontent.com/amki/AkuTrack/master/images/icon.png",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 14,
     "TestingDalamudApiLevel": 14,
-    "Tags": [
-      "plugin",
-      "object"
-    ],
+    "Tags": ["plugin", "object"],
     "DownloadLinkInstall": "https://github.com/amki/AkuTrack/releases/download/v0.0.29/latest.zip",
     "DownloadLinkTesting": "https://github.com/amki/AkuTrack/releases/download/v0.0.29/latest.zip",
     "DownloadLinkUpdate": "https://github.com/amki/AkuTrack/releases/download/v0.0.29/latest.zip"
