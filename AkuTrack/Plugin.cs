@@ -24,7 +24,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public Configuration Configuration { get; init; }
 
-    public readonly WindowSystem WindowSystem = new("AkuTrack");
+    public readonly WindowSystem windowSystem = new("AkuTrack");
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
     private MapWindow MapWindow { get; init; }
@@ -62,6 +62,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<UploadManager>()
             .AddSingleton<ObjTrackManager>()
             .AddSingleton<BottomBar>()
+            .AddSingleton(windowSystem)
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
@@ -69,9 +70,9 @@ public sealed class Plugin : IDalamudPlugin
         MapWindow = serviceProvider.GetRequiredService<MapWindow>();
 
 
-        WindowSystem.AddWindow(ConfigWindow);
-        WindowSystem.AddWindow(MainWindow);
-        WindowSystem.AddWindow(MapWindow);
+        windowSystem.AddWindow(ConfigWindow);
+        windowSystem.AddWindow(MainWindow);
+        windowSystem.AddWindow(MapWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -86,7 +87,7 @@ public sealed class Plugin : IDalamudPlugin
         });
 
         // Tell the UI system that we want our windows to be drawn through the window system
-        PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
+        PluginInterface.UiBuilder.Draw += windowSystem.Draw;
 
         // This adds a button to the plugin installer entry of this plugin which allows
         // toggling the display status of the configuration ui
@@ -104,11 +105,11 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         // Unregister all actions to not leak anything during disposal of plugin
-        PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
+        PluginInterface.UiBuilder.Draw -= windowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         
-        WindowSystem.RemoveAllWindows();
+        windowSystem.RemoveAllWindows();
 
         ConfigWindow.Dispose();
         MainWindow.Dispose();

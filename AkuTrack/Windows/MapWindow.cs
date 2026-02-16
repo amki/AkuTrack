@@ -18,6 +18,7 @@ using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
 using Lumina.Excel.Sheets.Experimental;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -37,6 +38,7 @@ public class MapWindow : Window, IDisposable
     private readonly Configuration configuration;
     private readonly ObjTrackManager objTrackManager;
     private readonly UploadManager uploadManager;
+    private readonly WindowSystem windowSystem;
     private readonly IDataManager dataManager;
     private readonly IClientState clientState;
     private readonly IPluginLog log;
@@ -55,10 +57,11 @@ public class MapWindow : Window, IDisposable
     private uint currentTerritory = 0;
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
+    private List<AkuGameObject> clickedObjects = new();
     private AkuGameObject? lastClickedObj = null;
+    private DetailsWindow dw = null;
 
     private readonly MapContextMenu mapContextMenu = new();
-    private readonly AkuObjectContextMenu akuObjectContextMenu = new();
     private readonly BottomBar bottomBar;
 
     public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
@@ -71,6 +74,7 @@ public class MapWindow : Window, IDisposable
         ObjTrackManager objTrackManager,
         UploadManager uploadManager,
         BottomBar bottomBar,
+        WindowSystem windowSystem,
         IDataManager dataManager,
         IClientState clientState,
         ITextureProvider textureProvider,
@@ -86,6 +90,7 @@ public class MapWindow : Window, IDisposable
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
         this.bottomBar = bottomBar;
+        this.windowSystem = windowSystem;
         this.textureProvider = textureProvider;
         this.textureSubstitutionProvider = textureSubstitutionProvider;
         SizeConstraints = new WindowSizeConstraints
@@ -129,8 +134,14 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapElements() {
-        if(lastClickedObj != null)
-            akuObjectContextMenu.Draw(lastClickedObj);
+        if (clickedObjects.Count > 0)
+        {
+            DrawAkuObjectContextMenu(clickedObjects);
+            if(!ImGui.IsPopupOpen("AkuTrack_AkuObject_Context_Menu")) {
+                if(clickedObjects.Count > 0)
+                    clickedObjects.Clear();
+            }
+        }
         DrawMapBackground();
         if (ImGui.IsItemHovered())
         {
@@ -308,11 +319,30 @@ public class MapWindow : Window, IDisposable
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
-            lastClickedObj = obj;
+            clickedObjects.Add(obj);
         }
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
+            DrawIcon(60429, obj.pos, 3.14f);
+        }
+    }
+
+    public void DrawAkuObjectContextMenu(List<AkuGameObject> objs)
+    {
+        using var contextMenu = ImRaii.ContextPopup("AkuTrack_AkuObject_Context_Menu");
+        if (!contextMenu) return;
+
+        foreach (var obj in objs)
+        {
+            if (ImGui.MenuItem($"Ich bin ein AKUOBJEKT {obj.bid}"))
+            {
+                log.Debug("Klick!");
+                var dw = new DetailsWindow(windowSystem, log, dataManager, textureProvider, obj);
+                windowSystem.AddWindow(dw);
+                dw.Toggle();
+                log.Debug("Klack!");
+            }
         }
     }
 
@@ -320,11 +350,17 @@ public class MapWindow : Window, IDisposable
     {
         var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
 
-        var p = ((GetMapCoordinateFor3D(position)) * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
+        var p = ((GetMapCoordinateFor3D(position)) * Scale) + DrawPosition - (texture.Size / 4.0f);
 
+        if (configuration.DrawDebugSquares)
+        {
+            ImGui.SetCursorPos(p);
+            var cursorPos = ImGui.GetCursorScreenPos();
+            ImGui.GetWindowDrawList().AddRect(cursorPos, cursorPos + (texture.Size / 2.0f), ImGui.GetColorU32(configuration.TextColor), 3.0f);
+        }
         ImGui.SetCursorPos(p);
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
-        ImGui.Image(texture.Handle, texture.Size / 2.0f * Scale);
+        ImGui.Image(texture.Handle, texture.Size / 2.0f);
     }
 
     private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation)
@@ -406,7 +442,7 @@ public class MapWindow : Window, IDisposable
 
         var p = ImGui.GetWindowPos() +
                            DrawPosition +
-                           (GetPlayerMapPosition(pos) -
+                           (GetPlayerMapPosition(pos) +
                             GetMapOffsetVector() +
                             GetMapCenterOffsetVector()) * Scale;
         //var p = ((GetMapCoordinateFor3D(pos)) * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
@@ -522,7 +558,7 @@ public class MapWindow : Window, IDisposable
     /// <summary>
     /// Unscaled Vector of SelectedX, SelectedY
     /// </summary>
-    public static unsafe Vector2 GetRawMapOffsetVector() => new(AgentMap.Instance()->SelectedOffsetX, AgentMap.Instance()->SelectedOffsetY);
+    public static unsafe Vector2 GetRawMapOffsetVector() => new(AgentMap.Instance()->SelectedOffsetX * -1, AgentMap.Instance()->SelectedOffsetY * -1);
 
     /// <summary>
     /// Selected Scale Factor

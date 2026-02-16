@@ -89,8 +89,9 @@ namespace AkuTrack.Managers
                         return false;
                     }
                 });
-            } catch(Exception e) {
-                log.Debug($"Exception: {e.Message}");
+            } catch (HttpRequestException e)
+            {
+                log.Debug($"HttpRequestException: {e.Message}");
                 return false;
             }
         }
