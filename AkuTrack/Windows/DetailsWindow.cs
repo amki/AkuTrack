@@ -27,7 +27,7 @@ public class DetailsWindow : Window, IDisposable
     // We give this window a constant ID using ###.
     // This allows for labels to be dynamic, like "{FPS Counter}fps###XYZ counter window",
     // and the window ID will always be "###XYZ counter window" for ImGui
-    public DetailsWindow(WindowSystem windowSystem, IPluginLog log, IDataManager dataManager, ITextureProvider textureProvider, AkuGameObject obj) : base($"AkuTrack - Details for {obj.bid}##details{obj.bid}")
+    public DetailsWindow(WindowSystem windowSystem, IPluginLog log, IDataManager dataManager, ITextureProvider textureProvider, AkuGameObject obj) : base($"AkuTrack - Details for {obj.bid}##akutrack_details_{obj.bid}")
     {
         this.windowSystem = windowSystem;
         this.log = log;
@@ -113,15 +113,18 @@ public class DetailsWindow : Window, IDisposable
             {
                 if (gatheringItemRow.Item.TryGetValue<Item>(out var itemRow))
                 {
+                    var texture = textureProvider.GetFromGameIcon(new GameIconLookup(itemRow.Icon)).GetWrapOrEmpty();                    
                     ImGui.LabelText("", $"Item {gatheringItemRow.RowId}: {itemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel})");
-                    var texture = textureProvider.GetFromGameIcon(new GameIconLookup(itemRow.Icon)).GetWrapOrEmpty();
+                    ImGui.SameLine();
                     ImGui.Image(texture.Handle, texture.Size / 2.0f);
+
                 }
                 else if (gatheringItemRow.Item.TryGetValue<EventItem>(out var eventItemRow))
                 {
-                    ImGui.LabelText("", $"Item {gatheringItemRow.RowId}: {eventItemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel})");
                     var texture = textureProvider.GetFromGameIcon(new GameIconLookup(eventItemRow.Icon)).GetWrapOrEmpty();
-                    ImGui.Image(texture.Handle, texture.Size / 2.0f);
+                    ImGui.LabelText("", $"Item {gatheringItemRow.RowId}: {eventItemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel})");
+                    ImGui.SameLine();
+                    ImGui.Image(texture.Handle, texture.Size / 2.0f);                    
                 }
             }
         }

@@ -2,6 +2,7 @@ using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Common.Configuration;
 using Serilog;
 using System;
 using System.Numerics;
@@ -18,7 +19,7 @@ public class ConfigWindow : Window, IDisposable
     // We give this window a constant ID using ###.
     // This allows for labels to be dynamic, like "{FPS Counter}fps###XYZ counter window",
     // and the window ID will always be "###XYZ counter window" for ImGui
-    public ConfigWindow(Configuration configuration, IPluginLog log) : base("A Wonderful Configuration Window###With a constant ID")
+    public ConfigWindow(Configuration configuration, IPluginLog log) : base("AkuTrack - Config###akutrack_config")
     {
         /*Flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
                 ImGuiWindowFlags.NoScrollWithMouse;
@@ -48,10 +49,43 @@ public class ConfigWindow : Window, IDisposable
     public override void Draw()
     {
         // Can't ref a property, so use a local copy
-        var configValue = configuration.DrawDebugSquares;
-        if (ImGui.Checkbox("Draw debug squares?", ref configValue))
+        var drawRemoteMarker = configuration.DrawRemoteMarker;
+        if(ImGui.Checkbox("Draw remote?", ref drawRemoteMarker)) {
+            configuration.DrawRemoteMarker = drawRemoteMarker;
+            configuration.Save();
+        }
+        var drawBNpc = configuration.DrawBNpc;
+        if (ImGui.Checkbox("Draw BNpc?", ref drawBNpc)) {
+            configuration.DrawBNpc = drawBNpc;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        var drawENpc = configuration.DrawENpc;
+        if (ImGui.Checkbox("Draw ENpc?", ref drawENpc))
         {
-            configuration.DrawDebugSquares = configValue;
+            configuration.DrawENpc = drawENpc;
+            configuration.Save();
+        }
+
+        var drawEObj = configuration.DrawEObj;
+        if (ImGui.Checkbox("Draw EObj?", ref drawEObj))
+        {
+            configuration.DrawEObj = drawEObj;
+            configuration.Save();
+        }
+
+        var drawGatheringPoint = configuration.DrawGatheringPoint;
+        if (ImGui.Checkbox("Draw GatheringPoint?", ref drawGatheringPoint))
+        {
+            configuration.DrawGatheringPoint = drawGatheringPoint;
+            configuration.Save();
+        }
+
+        
+        var drawDebugSquares = configuration.DrawDebugSquares;
+        if (ImGui.Checkbox("Draw debug squares?", ref drawDebugSquares))
+        {
+            configuration.DrawDebugSquares = drawDebugSquares;
             // Can save immediately on change if you don't want to provide a "Save and Close" button
             configuration.Save();
         }

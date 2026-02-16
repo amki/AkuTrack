@@ -27,6 +27,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Reflection.Metadata.Ecma335;
 using System.Threading;
 using System.Threading.Tasks;
 using static Lumina.Data.Parsing.Layer.LayerCommon;
@@ -81,7 +82,7 @@ public class MapWindow : Window, IDisposable
         ITextureSubstitutionProvider textureSubstitutionProvider,
         IPluginLog log
         )
-        : base("AkuTrack - Map##With a hidden ID", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+        : base("AkuTrack - Map##akutrack_map", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         this.configuration = configuration;
         this.log = log;
@@ -160,10 +161,14 @@ public class MapWindow : Window, IDisposable
                 DrawAkuGameObject(o.Value);
             }
         }
-        foreach (var o in downloadList)
-        {
-            DrawAkuGameObject(o.Value);
+        if(configuration.DrawRemoteMarker) {
+            foreach (var o in downloadList)
+            {
+                if (!objTrackManager.seenList.ContainsKey(o.Key))
+                    DrawAkuGameObject(o.Value);
+            }
         }
+        
         try
         {
             var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().GetRow(currentMap);
@@ -280,10 +285,14 @@ public class MapWindow : Window, IDisposable
             return;
         if (obj.t == "EventNpc")
         {
+            if (!configuration.DrawENpc)
+                return;
             DrawIcon(60424, obj.pos, obj.r);
         }
         else if (obj.t == "EventObj")
         {
+            if (!configuration.DrawEObj)
+                return;
             if (obj.bid == 2000401)
                 DrawIcon(60425, obj.pos, obj.r);
             else if (obj.bid == 2000402)
@@ -295,6 +304,8 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "BattleNpc")
         {
+            if(!configuration.DrawBNpc)
+                return;
             DrawIcon(60422, obj.pos, obj.r);
         }
         else if (obj.t == "Aetheryte")
@@ -309,6 +320,8 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "GatheringPoint")
         {
+            if (!configuration.DrawGatheringPoint)
+                return;
             if (!dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().TryGetRow(obj.bid, out var gatheringPointRow))
             {
                 log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");

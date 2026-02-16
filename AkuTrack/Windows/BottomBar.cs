@@ -17,9 +17,12 @@ namespace AkuTrack.Windows
     {
         private readonly IPluginLog log;
         private readonly Configuration configuration;
+        private readonly ConfigWindow configWindow;
         public BottomBar(IPluginLog log,
+            ConfigWindow configWindow,
             Configuration configuration) {
             this.log = log;
+            this.configWindow = configWindow;
             this.configuration = configuration;
         }
         public unsafe void Draw(bool isMapHovered, Vector2 currentMapPixelSize, Vector2 DrawPosition, Vector2 DrawOffset, float Scale)
@@ -30,10 +33,11 @@ namespace AkuTrack.Windows
                 ImGui.SetCursorPos(ImGui.GetContentRegionMax() - bottomBarSize);
                 using var childBackgroundStyle = ImRaii.PushColor(ImGuiCol.ChildBg, Vector4.Zero with { W = 0.33f });
                 using var bottomBar = ImRaii.Child("bottom_child", bottomBarSize);
-                if (ImGui.Button("TEST"))
+                if (ImGui.Button("Config"))
                 {
-                    log.Debug("KLIKC");
+                    configWindow.Toggle();
                 }
+
                 if (true /*isMapHovered*/)
                 {
                     // Set cursorPosition to top left corner
@@ -45,7 +49,6 @@ namespace AkuTrack.Windows
                     cursorPosition /= Scale;
 
                     // cursorPosition is now relative to map texture and always (0,0) / (2048/2048)
-
 
                     var cursorMapPosition = TexturePixelToIngameCoord(cursorPosition);
 

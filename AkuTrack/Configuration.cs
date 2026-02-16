@@ -10,6 +10,11 @@ public class Configuration : IPluginConfiguration
     public int Version { get; set; } = 0;
 
     public bool IsConfigWindowMovable { get; set; } = true;
+    public bool DrawRemoteMarker { get; set; } = true;
+    public bool DrawBNpc { get; set; } = true;
+    public bool DrawENpc { get; set; } = true;
+    public bool DrawEObj { get; set; } = true;
+    public bool DrawGatheringPoint { get; set; } = true;
     public bool DrawDebugSquares { get; set; } = false;
 
     public Vector4 TextColor { get; set; } = new Vector4(1.0f, 0.0f, 1.0f, 1.0f);
