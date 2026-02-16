@@ -355,7 +355,7 @@ public class MapWindow : Window, IDisposable
             if (ImGui.MenuItem($"{obj.t} {obj.bid}"))
             {
                 log.Debug("Klick!");
-                var dw = new DetailsWindow(windowSystem, log, dataManager, textureProvider, obj);
+                var dw = new DetailsWindow(windowSystem, log, clientState, dataManager, textureProvider, obj);
                 windowSystem.AddWindow(dw);
                 dw.Toggle();
                 log.Debug("Klack!");

@@ -18,11 +18,14 @@ namespace AkuTrack.Windows
         private readonly IPluginLog log;
         private readonly Configuration configuration;
         private readonly ConfigWindow configWindow;
+        private readonly SearchWindow searchWindow;
         public BottomBar(IPluginLog log,
             ConfigWindow configWindow,
+            SearchWindow searchWindow,
             Configuration configuration) {
             this.log = log;
             this.configWindow = configWindow;
+            this.searchWindow = searchWindow;
             this.configuration = configuration;
         }
         public unsafe void Draw(bool isMapHovered, Vector2 currentMapPixelSize, Vector2 DrawPosition, Vector2 DrawOffset, float Scale)
@@ -36,6 +39,11 @@ namespace AkuTrack.Windows
                 if (ImGui.Button("Config"))
                 {
                     configWindow.Toggle();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Search"))
+                {
+                    searchWindow.Toggle();
                 }
 
                 if (true /*isMapHovered*/)

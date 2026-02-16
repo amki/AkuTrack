@@ -5,6 +5,7 @@ using Dalamud.Interface.FontIdentifier;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
+using Dalamud.Utility;
 using Lumina.Excel.Sheets;
 using Serilog;
 using System;
@@ -18,6 +19,7 @@ public class DetailsWindow : Window, IDisposable
 {
     private readonly WindowSystem windowSystem;
     private readonly IPluginLog log;
+    private readonly IClientState clientState;
     private readonly IDataManager dataManager;
     private readonly ITextureProvider textureProvider;
 
@@ -26,10 +28,11 @@ public class DetailsWindow : Window, IDisposable
     // We give this window a constant ID using ###.
     // This allows for labels to be dynamic, like "{FPS Counter}fps###XYZ counter window",
     // and the window ID will always be "###XYZ counter window" for ImGui
-    public DetailsWindow(WindowSystem windowSystem, IPluginLog log, IDataManager dataManager, ITextureProvider textureProvider, AkuGameObject obj) : base($"AkuTrack - Details for {obj.bid}##akutrack_details_{obj.bid}")
+    public DetailsWindow(WindowSystem windowSystem, IPluginLog log, IClientState clienState, IDataManager dataManager, ITextureProvider textureProvider, AkuGameObject obj) : base($"AkuTrack - Details for {obj.bid}##akutrack_details_{obj.bid}")
     {
         this.windowSystem = windowSystem;
         this.log = log;
+        this.clientState = clienState;
         this.dataManager = dataManager;
         this.textureProvider = textureProvider;
         this.log.Debug("Construct Window");
@@ -95,7 +98,7 @@ public class DetailsWindow : Window, IDisposable
         if(!dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>().TryGetRow(obj.bid, out var eNpcResident)) {
             return;
         }
-        ImGui.LabelText("", $"Name: {eNpcResident.Singular}");
+        ImGui.LabelText("", $"Name: {StringExtensions.ToUpper(eNpcResident.Singular.ToString(), true, true, false, clientState.ClientLanguage)}");
     }
 
     private void DrawGatheringPointDetails() {
