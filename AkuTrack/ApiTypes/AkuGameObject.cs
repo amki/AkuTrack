@@ -39,7 +39,7 @@ namespace AkuTrack.ApiTypes
             this.created_at = dgo.created_at;
             this.lastseen_at = dgo.last_seen_at;
             this.t = dgo.objecttype;
-            this.name = "";
+            this.name = "<downloaded>";
             this.mid = dgo.map_id;
             this.zid = dgo.zone_id;
             this.pos = new Vector3(dgo.x, dgo.y, dgo.z);

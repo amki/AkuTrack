@@ -52,6 +52,7 @@ namespace AkuTrack.Managers
 
         public void CleanSeen() {
             seenList.Clear();
+            seenObjTable.Clear();
             toUpload.Clear();
         }
 
@@ -96,12 +97,20 @@ namespace AkuTrack.Managers
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion ||
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Housing ||
                     obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament ||
-                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer ||
-                    obj.BaseId == 13498 || // Carbuncle
-                    obj.BaseId == 1008 // Eos
+                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer
                     ) {
                     continue;
                 }
+                if(obj is IBattleNpc bnpc) {
+                    if(bnpc.BattleNpcKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.Pet ||
+                        bnpc.BattleNpcKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.Chocobo ||
+                        bnpc.BattleNpcKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.NpcPartyMember) {
+                        continue;
+                    }
+                }
+                // FIXME: For some reason GatheringPoints sometimes spawn without a name but then get it later?
+                if (obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint && obj.Name.ToString() == string.Empty)
+                    continue;
                 var uid = AkuGameObject.GetUniqueId(obj);
                 if(uid == null ) {
                     log.Debug($"ERROR: Could not GetUniqueId from obj.bid {obj.BaseId} name {obj.Name}");
@@ -140,7 +149,6 @@ namespace AkuTrack.Managers
                     //log.Debug($"Obj {obj.GameObjectId} has moved but was already sent.");
                     continue;
                 }
-                //log.Debug($"Adding new obj {obj.GameObjectId} to tables and up");
                 seenList.Add(uid, upObj);
                 seenObjTable.Remove(obj.GameObjectId);
                 seenObjTable.Add(obj.GameObjectId, upObj);

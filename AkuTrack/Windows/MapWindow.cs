@@ -651,7 +651,6 @@ public class MapWindow : Window, IDisposable
                     {
                         var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>(clientState.ClientLanguage).GetRow(obj.bid);
                         //FIXME: Find the gathering node's name. It is in GatheringPointName but how to get there?
-                        obj.name = "";
                     }
                     catch (ArgumentOutOfRangeException)
                     {
