@@ -3,9 +3,11 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Newtonsoft.Json;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Runtime.ConstrainedExecution;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -81,7 +83,7 @@ namespace AkuTrack.ApiTypes
             string input = string.Empty;
             if (t == "EventNpc" || t == "BattleNpc")
             {
-                input = $"{t},{bid},{Math.Round(pos.X / 10, 0) * 10},{Math.Round(pos.Y / 10, 0) * 10},{Math.Round(pos.Z / 10, 0) * 10}";
+                input = $"{t},{bid},{Math.Round(pos.X / 10, 0) * 10},{Math.Round(pos.Y / 10, 0) * 10},{Math.Round(pos.Z / 10, 0) * 10},{nid}";
             }
             else
             {
@@ -108,7 +110,12 @@ namespace AkuTrack.ApiTypes
             string input = string.Empty;
             if (o.ObjectKind == ObjectKind.EventNpc || o.ObjectKind == ObjectKind.BattleNpc)
             {
-                input = $"{o.ObjectKind},{o.BaseId},{Math.Round(o.Position.X / 10, 0) * 10},{Math.Round(o.Position.Y / 10, 0) * 10},{Math.Round(o.Position.Z / 10, 0) * 10}";
+                if (o is ICharacter c)
+                {
+                    input = $"{o.ObjectKind},{o.BaseId},{Math.Round(o.Position.X / 10, 0) * 10},{Math.Round(o.Position.Y / 10, 0) * 10},{Math.Round(o.Position.Z / 10, 0) * 10},{c.NameId}";
+                } else {
+                    return null;
+                }
             }
             else
             {
