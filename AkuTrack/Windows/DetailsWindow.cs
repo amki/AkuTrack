@@ -1,6 +1,7 @@
 using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.FontIdentifier;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
@@ -103,13 +104,13 @@ public class DetailsWindow : Window, IDisposable
         var items = x.Value.GatheringPointBase.Value.Item.ToList();
         log.Debug($"Found {items.Count} items in node");
         for(var i=0; i<items.Count; i++ ) {
-            var item = items[i];
-            ImGui.LabelText("", $"Item {i+1}: {item.GetValueOrDefault<GatheringItem>()?.Item.GetValueOrDefault<Item>()?.Name} ({item.GetValueOrDefault<GatheringItem>()?.GatheringItemLevel.Value.GatheringItemLevel})");
-            var luminaid = item.GetValueOrDefault<GatheringItem>()?.Item.GetValueOrDefault<Item>()?.Icon;
-            if (luminaid != null) {
-                int iconid = (int)(luminaid);
-                var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
-                ImGui.Image(texture.Handle, texture.Size / 2.0f);
+            var itemRow = items[i];
+            if(itemRow.TryGetValue<GatheringItem>(out var gatheringItem)) {
+                if(gatheringItem.Item.TryGetValue<Item>(out var item)) {
+                    ImGui.LabelText("", $"Item {i + 1}: {item.Name} ({gatheringItem.GatheringItemLevel.Value.GatheringItemLevel})");
+                    var texture = textureProvider.GetFromGameIcon((int) item.Icon).GetWrapOrEmpty();
+                    ImGui.Image(texture.Handle, texture.Size / 2.0f);
+                }
             }
         }
     }
