@@ -2,6 +2,7 @@ using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.FontIdentifier;
+using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
@@ -79,7 +80,9 @@ public class DetailsWindow : Window, IDisposable
         }
         else if (obj.t == "Aetheryte")
         {
-            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(obj.bid);
+            if(!dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().TryGetRow(obj.bid, out var aetheryte)) {
+                return;
+            }
             ImGui.LabelText("", "Aetheryte");
 
         }
@@ -90,25 +93,34 @@ public class DetailsWindow : Window, IDisposable
 
     private void DrawENpcDetails() {
         ImGui.LabelText("", "EventNpc");
-        var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>().GetRowOrDefault(obj.bid);
-        ImGui.LabelText("", $"Name: {x.Value.Singular}");
+        if(!dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>().TryGetRow(obj.bid, out var eNpcResident)) {
+            return;
+        }
+        ImGui.LabelText("", $"Name: {eNpcResident.Singular}");
     }
 
     private void DrawGatheringPointDetails() {
         ImGui.LabelText("", "GatheringPoint");
-        var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().GetRowOrDefault(obj.bid);
-        ImGui.LabelText("", $"Type: {x.Value.GatheringPointBase.Value.GatheringType.Value.Name}");
-        ImGui.LabelText("", $"Level: {x.Value.GatheringPointBase.Value.GatheringLevel}");
-        ImGui.LabelText("", $"PlaceName: {x.Value.PlaceName.Value.Name}");
-        //ImGui.LabelText("", $"ItemCount: {x.Value.GatheringPointBase.Value.Item.Count}");
-        var items = x.Value.GatheringPointBase.Value.Item.ToList();
-        log.Debug($"Found {items.Count} items in node");
-        for(var i=0; i<items.Count; i++ ) {
-            var itemRow = items[i];
-            if(itemRow.TryGetValue<GatheringItem>(out var gatheringItem)) {
-                if(gatheringItem.Item.TryGetValue<Item>(out var item)) {
-                    ImGui.LabelText("", $"Item {i + 1}: {item.Name} ({gatheringItem.GatheringItemLevel.Value.GatheringItemLevel})");
-                    var texture = textureProvider.GetFromGameIcon((int) item.Icon).GetWrapOrEmpty();
+        if(!dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().TryGetRow(obj.bid, out var gatheringPointRow)) {
+            return;
+        }
+        ImGui.LabelText("", $"Type: {gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.Name}");
+        ImGui.LabelText("", $"Level: {gatheringPointRow.GatheringPointBase.Value.GatheringLevel}");
+        ImGui.LabelText("", $"PlaceName: {gatheringPointRow.PlaceName.Value.Name}");
+        foreach (var item in gatheringPointRow.GatheringPointBase.Value.Item)
+        {
+            if (item.TryGetValue<GatheringItem>(out var gatheringItemRow))
+            {
+                if (gatheringItemRow.Item.TryGetValue<Item>(out var itemRow))
+                {
+                    ImGui.LabelText("", $"Item {gatheringItemRow.RowId}: {itemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel})");
+                    var texture = textureProvider.GetFromGameIcon(new GameIconLookup(itemRow.Icon)).GetWrapOrEmpty();
+                    ImGui.Image(texture.Handle, texture.Size / 2.0f);
+                }
+                else if (gatheringItemRow.Item.TryGetValue<EventItem>(out var eventItemRow))
+                {
+                    ImGui.LabelText("", $"Item {gatheringItemRow.RowId}: {eventItemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel})");
+                    var texture = textureProvider.GetFromGameIcon(new GameIconLookup(eventItemRow.Icon)).GetWrapOrEmpty();
                     ImGui.Image(texture.Handle, texture.Size / 2.0f);
                 }
             }

@@ -299,20 +299,22 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "Aetheryte")
         {
-            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(obj.bid);
-            if (x!.Value.AethernetName.Value.Name.ToString() != string.Empty && x.Value.PlaceName.Value.Name.ToString() == string.Empty)
-            {
-                DrawIcon(60430, obj.pos, 3.14f);
+            if(dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().TryGetRow(obj.bid, out var aetheryte)) {
+                if (aetheryte.AethernetName.Value.Name.ToString() != string.Empty && aetheryte.PlaceName.Value.Name.ToString() == string.Empty)
+                {
+                    DrawIcon(60430, obj.pos, 3.14f);
+                }
             }
-            else
-            {
-                DrawIcon(60453, obj.pos, 3.14f);
-            }
+            DrawIcon(60453, obj.pos, 3.14f);
         }
         else if (obj.t == "GatheringPoint")
         {
-            var x = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().GetRowOrDefault(obj.bid);
-            DrawIcon(x!.Value.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r);
+            if (!dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().TryGetRow(obj.bid, out var gatheringPointRow))
+            {
+                log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");
+                return;
+            }
+            DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r);
         }
         else
             DrawIcon(60515, obj.pos, obj.r);
