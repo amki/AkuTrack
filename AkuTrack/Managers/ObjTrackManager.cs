@@ -23,6 +23,7 @@ namespace AkuTrack.Managers
         private readonly UploadManager uploadManager;
 
         public Dictionary<string, AkuGameObject> seenList = new();
+        public Dictionary<ulong, AkuGameObject> seenObjTable = new();
         public List<AkuGameObject> toUpload = new();
 
         private TimeSpan lastUpdate = new(0);
@@ -106,13 +107,16 @@ namespace AkuTrack.Managers
                     log.Debug($"ERROR: Could not GetUniqueId from obj.bid {obj.BaseId} name {obj.Name}");
                     continue;
                 }
+                // Check if this object has already been sent by us
                 if (seenList.ContainsKey(uid))
                 {
                     var oldObj = seenList[uid];
-                    if(uid != oldObj.GetUniqueId()) {
+                    if (uid != oldObj.GetUniqueId())
+                    {
                         log.Error($"Something terrible happened! -> Check {uid} but seenList fetches {oldObj.GetUniqueId()}");
                     }
-                    if(obj.ObjectKind.ToString() != oldObj.t || obj.Name.ToString() != oldObj.name || obj.BaseId != oldObj.bid) {
+                    if (obj.ObjectKind.ToString() != oldObj.t || obj.Name.ToString() != oldObj.name || obj.BaseId != oldObj.bid)
+                    {
                         log.Error($"Something terrible happened! oldObj and obj:");
                         log.Error($"{oldObj.t} || {obj.ObjectKind.ToString()}");
                         log.Error($"{oldObj.mid} || {clientState.MapId}");
@@ -120,23 +124,37 @@ namespace AkuTrack.Managers
                         log.Error($"{oldObj.bid} || {obj.BaseId}");
                     }
                     continue;
-                } else {
-                    //log.Debug($"Found new obj {obj.Name} id: {GenUniqueIdForObj(obj)} @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
-                    var upObj = new AkuGameObject(obj, clientState);
-
-                    // Check if this object is owned by a player (e.g. a battlepet)
-                    var owner = objectTable.SearchById(obj.OwnerId);
-                    if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player)
-                    {
-                        log.Debug($"Obj {obj.Name} [{obj.BaseId}] is player owned. Not sending. @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
-                        continue;
-                    } else {
-                        seenList.Add(uid, upObj);
-                        objects.Add(upObj);
-                    }
                 }
+                // Check if this object is owned by a player (e.g. a battlepet) or has been aggroed
+                var owner = objectTable.SearchById(obj.OwnerId);
+                if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player)
+                {
+                    log.Debug($"Obj {obj.Name} [{obj.BaseId}] is player owned. Not sending. @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
+                    continue;
+                }
+
+                var upObj = new AkuGameObject(obj, clientState);
+
+                // Check if there has been an object in this slot already and if it is likely still the same one but has moved (moving changes the uid hash)
+                if (seenObjTable.ContainsKey(obj.GameObjectId) && !HasTableContentChanged(obj, upObj)) {
+                    //log.Debug($"Obj {obj.GameObjectId} has moved but was already sent.");
+                    continue;
+                }
+                //log.Debug($"Adding new obj {obj.GameObjectId} to tables and up");
+                seenList.Add(uid, upObj);
+                seenObjTable.Remove(obj.GameObjectId);
+                seenObjTable.Add(obj.GameObjectId, upObj);
+                objects.Add(upObj);
             }
             return objects;
+        }
+
+        private bool HasTableContentChanged(IGameObject obj, AkuGameObject akuObj) {
+            if(obj.BaseId == akuObj.bid && obj.Name.ToString() == akuObj.name) {
+                return false;
+            }
+            log.Debug($"Obj changed in table old: {obj.Name}({obj.BaseId}) new: {obj.Name}/{obj.BaseId}");
+            return true;
         }
     }
 }

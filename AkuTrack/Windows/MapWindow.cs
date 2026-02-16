@@ -59,8 +59,6 @@ public class MapWindow : Window, IDisposable
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
     private List<AkuGameObject> clickedObjects = new();
-    private AkuGameObject? lastClickedObj = null;
-    private DetailsWindow dw = null;
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly BottomBar bottomBar;
@@ -287,36 +285,36 @@ public class MapWindow : Window, IDisposable
         {
             if (!configuration.DrawENpc)
                 return;
-            DrawIcon(60424, obj.pos, obj.r);
+            DrawIcon(60424, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "EventObj")
         {
             if (!configuration.DrawEObj)
                 return;
             if (obj.bid == 2000401)
-                DrawIcon(60425, obj.pos, obj.r);
+                DrawIcon(60425, obj.pos, obj.r, obj.tint);
             else if (obj.bid == 2000402)
-                DrawIcon(60570, obj.pos, obj.r);
+                DrawIcon(60570, obj.pos, obj.r, obj.tint);
             else if (obj.bid == 2000470)
-                DrawIcon(60460, obj.pos, obj.r);
+                DrawIcon(60460, obj.pos, obj.r, obj.tint);
             else
-                DrawIcon(60353, obj.pos, obj.r);
+                DrawIcon(60353, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "BattleNpc")
         {
             if(!configuration.DrawBNpc)
                 return;
-            DrawIcon(60422, obj.pos, obj.r);
+            DrawIcon(60422, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "Aetheryte")
         {
             if(dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().TryGetRow(obj.bid, out var aetheryte)) {
                 if (aetheryte.AethernetName.Value.Name.ToString() != string.Empty && aetheryte.PlaceName.Value.Name.ToString() == string.Empty)
                 {
-                    DrawIcon(60430, obj.pos, 3.14f);
+                    DrawIcon(60430, obj.pos, 3.14f, obj.tint);
                 }
             }
-            DrawIcon(60453, obj.pos, 3.14f);
+            DrawIcon(60453, obj.pos, 3.14f, obj.tint);
         }
         else if (obj.t == "GatheringPoint")
         {
@@ -327,10 +325,10 @@ public class MapWindow : Window, IDisposable
                 log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");
                 return;
             }
-            DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r);
+            DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r, obj.tint);
         }
         else
-            DrawIcon(60515, obj.pos, obj.r);
+            DrawIcon(60515, obj.pos, obj.r, obj.tint);
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
@@ -338,9 +336,13 @@ public class MapWindow : Window, IDisposable
         }
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
-            DrawIcon(60429, obj.pos, 3.14f);
+            DrawTooltip(obj);
+            DrawIcon(60429, obj.pos, 3.14f, obj.tint);
         }
+    }
+
+    private void DrawTooltip(AkuGameObject obj) {
+        ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
     }
 
     public void DrawAkuObjectContextMenu(List<AkuGameObject> objs)
@@ -350,7 +352,7 @@ public class MapWindow : Window, IDisposable
 
         foreach (var obj in objs)
         {
-            if (ImGui.MenuItem($"Ich bin ein AKUOBJEKT {obj.bid}"))
+            if (ImGui.MenuItem($"{obj.t} {obj.bid}"))
             {
                 log.Debug("Klick!");
                 var dw = new DetailsWindow(windowSystem, log, dataManager, textureProvider, obj);
@@ -361,7 +363,7 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void DrawIcon(int iconid, Vector3 position, float rotation)
+    private void DrawIcon(int iconid, Vector3 position, float rotation, Vector4 tint)
     {
         var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
 
@@ -375,7 +377,7 @@ public class MapWindow : Window, IDisposable
         }
         ImGui.SetCursorPos(p);
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
-        ImGui.Image(texture.Handle, texture.Size / 2.0f);
+        ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, tint);
     }
 
     private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation)
@@ -611,7 +613,7 @@ public class MapWindow : Window, IDisposable
                     try
                     {
                         var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
-                        obj.name = y.Singular.ToString();
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
                     }
                     catch (ArgumentOutOfRangeException)
                     {
@@ -625,7 +627,7 @@ public class MapWindow : Window, IDisposable
                     try
                     {
                         var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
-                        obj.name = y.Singular.ToString();
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
                     }
                     catch (ArgumentOutOfRangeException)
                     {
@@ -637,11 +639,23 @@ public class MapWindow : Window, IDisposable
                     try
                     {
                         var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
-                        obj.name = y.Singular.ToString();
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
                     }
                     catch (ArgumentOutOfRangeException)
                     {
                         log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
+                    }
+                }
+                if(obj.t == "GatheringPoint") {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>(clientState.ClientLanguage).GetRow(obj.bid);
+                        //FIXME: Find the gathering node's name. It is in GatheringPointName but how to get there?
+                        obj.name = "";
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of GatheringPoint");
                     }
                 }
                 if(obj.GetUniqueId() == null) {

@@ -20,7 +20,6 @@ public class DetailsWindow : Window, IDisposable
     private readonly IPluginLog log;
     private readonly IDataManager dataManager;
     private readonly ITextureProvider textureProvider;
-    private Vector4 color = new();
 
     private readonly AkuGameObject obj;
 

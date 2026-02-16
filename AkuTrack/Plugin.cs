@@ -28,6 +28,7 @@ public sealed class Plugin : IDalamudPlugin
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
     private MapWindow MapWindow { get; init; }
+    private SearchWindow SearchWindow { get; init; }
 
     public Plugin(
         IFramework framework,
@@ -59,6 +60,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<MainWindow>()
             .AddSingleton<ConfigWindow>()
             .AddSingleton<MapWindow>()
+            .AddSingleton<SearchWindow>()
             .AddSingleton<UploadManager>()
             .AddSingleton<ObjTrackManager>()
             .AddSingleton<BottomBar>()
@@ -68,11 +70,13 @@ public sealed class Plugin : IDalamudPlugin
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
         ConfigWindow = serviceProvider.GetRequiredService<ConfigWindow>();
         MapWindow = serviceProvider.GetRequiredService<MapWindow>();
+        SearchWindow = serviceProvider.GetRequiredService<SearchWindow>();
 
 
         windowSystem.AddWindow(ConfigWindow);
         windowSystem.AddWindow(MainWindow);
         windowSystem.AddWindow(MapWindow);
+        windowSystem.AddWindow(SearchWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {

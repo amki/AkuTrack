@@ -37,7 +37,7 @@ namespace AkuTrack.ApiTypes
             this.created_at = dgo.created_at;
             this.lastseen_at = dgo.last_seen_at;
             this.t = dgo.objecttype;
-            this.name = "<downloaded>";
+            this.name = "";
             this.mid = dgo.map_id;
             this.zid = dgo.zone_id;
             this.pos = new Vector3(dgo.x, dgo.y, dgo.z);
@@ -47,6 +47,7 @@ namespace AkuTrack.ApiTypes
             this.moid = dgo.moid;
             this.hr = dgo.hit_radius;
             this.nid = dgo.nid;
+            this.tint = new Vector4(0.5f, 0.5f, 0.5f, 0.5f);
         }
         [JsonIgnore]
         public DateTimeOffset? created_at { get; set; }
@@ -55,6 +56,8 @@ namespace AkuTrack.ApiTypes
         public string t { get; set; }
         [JsonIgnore]
         public string name { get; set; }
+        [JsonIgnore]
+        public Vector4 tint { get; set; } = new Vector4(1f, 1f, 1f, 1f);
         public uint mid { get; set; }
         public uint zid { get; set; }
         public Vector3 pos { get; set; }
@@ -78,11 +81,11 @@ namespace AkuTrack.ApiTypes
             string input = string.Empty;
             if (t == "EventNpc" || t == "BattleNpc")
             {
-                input = $"{t},{bid},{Math.Round(pos.X / 10, 0) * 10},{Math.Round(pos.Y / 10, 0) * 10},{Math.Round(pos.Z / 10, 0) * 10},{name}";
+                input = $"{t},{bid},{Math.Round(pos.X / 10, 0) * 10},{Math.Round(pos.Y / 10, 0) * 10},{Math.Round(pos.Z / 10, 0) * 10}";
             }
             else
             {
-                input = $"{t},{bid},{pos.X},{pos.Y},{pos.Z},{name}";
+                input = $"{t},{bid},{pos.X},{pos.Y},{pos.Z}";
             }
             if (input == string.Empty)
                 return null;
@@ -105,11 +108,11 @@ namespace AkuTrack.ApiTypes
             string input = string.Empty;
             if (o.ObjectKind == ObjectKind.EventNpc || o.ObjectKind == ObjectKind.BattleNpc)
             {
-                input = $"{o.ObjectKind},{o.BaseId},{Math.Round(o.Position.X / 10, 0) * 10},{Math.Round(o.Position.Y / 10, 0) * 10},{Math.Round(o.Position.Z / 10, 0) * 10},{o.Name.ToString()}";
+                input = $"{o.ObjectKind},{o.BaseId},{Math.Round(o.Position.X / 10, 0) * 10},{Math.Round(o.Position.Y / 10, 0) * 10},{Math.Round(o.Position.Z / 10, 0) * 10}";
             }
             else
             {
-                input = $"{o.ObjectKind},{o.BaseId},{o.Position.X},{o.Position.Y},{o.Position.Z},{o.Name.ToString()}";
+                input = $"{o.ObjectKind},{o.BaseId},{o.Position.X},{o.Position.Y},{o.Position.Z}";
             }
             if (input == string.Empty)
                 return null;
