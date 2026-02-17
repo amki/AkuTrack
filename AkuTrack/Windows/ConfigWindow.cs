@@ -14,7 +14,6 @@ public class ConfigWindow : Window, IDisposable
 {
     private readonly Configuration configuration;
     private readonly IPluginLog log;
-    private Vector4 color = new();
 
     // We give this window a constant ID using ###.
     // This allows for labels to be dynamic, like "{FPS Counter}fps###XYZ counter window",
@@ -27,8 +26,11 @@ public class ConfigWindow : Window, IDisposable
 
         this.log = log;
         this.configuration = configuration;
-        Size = new Vector2(232, 200);
-        SizeCondition = ImGuiCond.Always;
+        SizeConstraints = new WindowSizeConstraints
+        {
+            MinimumSize = new Vector2(100, 100),
+            MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+        };
     }
 
     public void Dispose() { }
@@ -36,6 +38,7 @@ public class ConfigWindow : Window, IDisposable
     public override void PreDraw()
     {
         // Flags must be added or removed before Draw() is being called, or they won't apply
+        /*
         if (configuration.IsConfigWindowMovable)
         {
             Flags &= ~ImGuiWindowFlags.NoMove;
@@ -44,6 +47,7 @@ public class ConfigWindow : Window, IDisposable
         {
             Flags |= ImGuiWindowFlags.NoMove;
         }
+        */
     }
 
     public override void Draw()
@@ -93,18 +97,12 @@ public class ConfigWindow : Window, IDisposable
         //ImGui.ColorEdit4("EINEFARBE##1", (float*)&color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | base_flags);
 
         ImGui.TextColored(new Vector4(1.0f, 0.0f, 1.0f, 1.0f), "Map Text Color:");
-        ImGui.ColorEdit4("EINEFARBE##1", ref color, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel | ImGuiColorEditFlags.DefaultOptions);
+        var textColor = configuration.TextColor;
+        ImGui.ColorEdit4("EINEFARBE##1", ref textColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel | ImGuiColorEditFlags.DefaultOptions);
         if (ImGui.Button("Sef"))
         {
-            log.Debug($"Set TextColor to {color}");
-            configuration.TextColor = color;
-            configuration.Save();
-        }
-
-        var movable = configuration.IsConfigWindowMovable;
-        if (ImGui.Checkbox("Movable Config Window", ref movable))
-        {
-            configuration.IsConfigWindowMovable = movable;
+            log.Debug($"Set TextColor to {textColor}");
+            configuration.TextColor = textColor;
             configuration.Save();
         }
     }

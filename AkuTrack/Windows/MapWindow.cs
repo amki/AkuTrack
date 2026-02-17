@@ -36,6 +36,7 @@ namespace AkuTrack.Windows;
 
 public class MapWindow : Window, IDisposable
 {
+    private readonly Plugin plugin;
     private readonly Configuration configuration;
     private readonly ObjTrackManager objTrackManager;
     private readonly UploadManager uploadManager;
@@ -58,6 +59,7 @@ public class MapWindow : Window, IDisposable
     private uint currentTerritory = 0;
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
+
     private List<AkuGameObject> clickedObjects = new();
 
     private readonly MapContextMenu mapContextMenu = new();
@@ -69,6 +71,7 @@ public class MapWindow : Window, IDisposable
     // The user will see "My Amazing Window" as window title,
     // but for ImGui the ID is "My Amazing Window##With a hidden ID"
     public MapWindow(
+        Plugin plugin,
         Configuration configuration,
         ObjTrackManager objTrackManager,
         UploadManager uploadManager,
@@ -82,6 +85,7 @@ public class MapWindow : Window, IDisposable
         )
         : base("AkuTrack - Map##akutrack_map", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
+        this.plugin = plugin;
         this.configuration = configuration;
         this.log = log;
         this.dataManager = dataManager;
@@ -352,13 +356,18 @@ public class MapWindow : Window, IDisposable
 
         foreach (var obj in objs)
         {
-            if (ImGui.MenuItem($"{obj.t} {obj.bid}"))
+            if (ImGui.MenuItem($"{obj.t} {obj.name}({obj.bid})"))
             {
-                log.Debug("Klick!");
-                var dw = new DetailsWindow(windowSystem, log, clientState, dataManager, textureProvider, obj);
+                string newName = $"akutrack_details_{obj.bid}";
+                foreach (var w in windowSystem.Windows)
+                {
+                    var wName = w.WindowName.Split("##")[1];
+                    if (wName == newName)
+                        return;
+                }
+                var dw = ActivatorUtilities.CreateInstance<DetailsWindow>(plugin.serviceProvider, new object[] { obj });
                 windowSystem.AddWindow(dw);
                 dw.Toggle();
-                log.Debug("Klack!");
             }
         }
     }

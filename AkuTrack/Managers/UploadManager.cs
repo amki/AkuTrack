@@ -91,7 +91,7 @@ namespace AkuTrack.Managers
                 });
             } catch (HttpRequestException e)
             {
-                log.Debug($"HttpRequestException: {e.Message}");
+                log.Debug($"HttpRequestException: {e.Message} | {JsonConvert.SerializeObject(payload)}");
                 return false;
             }
         }

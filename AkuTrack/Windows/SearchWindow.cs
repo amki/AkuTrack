@@ -39,6 +39,11 @@ namespace AkuTrack.Windows
             this.dataManager = dataManager;
             this.textureProvider = textureProvider;
             this.configuration = configuration;
+            SizeConstraints = new WindowSizeConstraints
+            {
+                MinimumSize = new Vector2(200, 300),
+                MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+            };
         }
 
         public void Dispose()

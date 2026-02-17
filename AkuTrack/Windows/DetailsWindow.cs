@@ -39,7 +39,7 @@ public class DetailsWindow : Window, IDisposable
         this.obj = obj;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(375, 330),
+            MinimumSize = new Vector2(250, 350),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
     }
@@ -109,24 +109,27 @@ public class DetailsWindow : Window, IDisposable
         ImGui.LabelText("", $"Type: {gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.Name}");
         ImGui.LabelText("", $"Level: {gatheringPointRow.GatheringPointBase.Value.GatheringLevel}");
         ImGui.LabelText("", $"PlaceName: {gatheringPointRow.PlaceName.Value.Name}");
+        var c = 0;
         foreach (var item in gatheringPointRow.GatheringPointBase.Value.Item)
         {
+            c++;
             if (item.TryGetValue<GatheringItem>(out var gatheringItemRow))
             {
+                if (gatheringItemRow.RowId == 0)
+                    continue;
                 if (gatheringItemRow.Item.TryGetValue<Item>(out var itemRow))
                 {
-                    var texture = textureProvider.GetFromGameIcon(new GameIconLookup(itemRow.Icon)).GetWrapOrEmpty();                    
-                    ImGui.LabelText("", $"Item {gatheringItemRow.RowId}: {itemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel})");
-                    ImGui.SameLine();
+                    var texture = textureProvider.GetFromGameIcon(new GameIconLookup(itemRow.Icon)).GetWrapOrEmpty();
                     ImGui.Image(texture.Handle, texture.Size / 2.0f);
-
+                    ImGui.SameLine();
+                    ImGui.LabelText("", $"Item {c}: {itemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel})");
                 }
                 else if (gatheringItemRow.Item.TryGetValue<EventItem>(out var eventItemRow))
                 {
                     var texture = textureProvider.GetFromGameIcon(new GameIconLookup(eventItemRow.Icon)).GetWrapOrEmpty();
-                    ImGui.LabelText("", $"Item {gatheringItemRow.RowId}: {eventItemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel})");
+                    ImGui.Image(texture.Handle, texture.Size / 2.0f);
                     ImGui.SameLine();
-                    ImGui.Image(texture.Handle, texture.Size / 2.0f);                    
+                    ImGui.LabelText("", $"Item {c}: {eventItemRow.Name} ({gatheringItemRow.GatheringItemLevel.Value.GatheringItemLevel}) | EventItem");
                 }
             }
         }

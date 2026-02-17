@@ -108,9 +108,6 @@ namespace AkuTrack.Managers
                         continue;
                     }
                 }
-                // FIXME: For some reason GatheringPoints sometimes spawn without a name but then get it later?
-                if (obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint && obj.Name.ToString() == string.Empty)
-                    continue;
                 var uid = AkuGameObject.GetUniqueId(obj);
                 if(uid == null ) {
                     log.Debug($"ERROR: Could not GetUniqueId from obj.bid {obj.BaseId} name {obj.Name}");
@@ -124,13 +121,18 @@ namespace AkuTrack.Managers
                     {
                         log.Error($"Something terrible happened! -> Check {uid} but seenList fetches {oldObj.GetUniqueId()}");
                     }
-                    if (obj.ObjectKind.ToString() != oldObj.t || obj.Name.ToString() != oldObj.name || obj.BaseId != oldObj.bid)
+                    if (obj.ObjectKind.ToString() != oldObj.t || obj.BaseId != oldObj.bid)
                     {
                         log.Error($"Something terrible happened! oldObj and obj:");
                         log.Error($"{oldObj.t} || {obj.ObjectKind.ToString()}");
                         log.Error($"{oldObj.mid} || {clientState.MapId}");
-                        log.Error($"{oldObj.name} || {obj.Name.ToString()}");
                         log.Error($"{oldObj.bid} || {obj.BaseId}");
+                    }
+                    if(obj is ICharacter c) {
+                        if(c.NameId != oldObj.nid) {
+                            log.Error($"Something terrible happened! oldObj and obj:");
+                            log.Error($"{oldObj.nid} || {c.NameId}");
+                        }
                     }
                     continue;
                 }
@@ -150,6 +152,7 @@ namespace AkuTrack.Managers
                     continue;
                 }
                 seenList.Add(uid, upObj);
+                // Remove here because it could also be that the go was here and changed
                 seenObjTable.Remove(obj.GameObjectId);
                 seenObjTable.Add(obj.GameObjectId, upObj);
                 objects.Add(upObj);
@@ -158,7 +161,7 @@ namespace AkuTrack.Managers
         }
 
         private bool HasTableContentChanged(IGameObject obj, AkuGameObject akuObj) {
-            if(obj.BaseId == akuObj.bid && obj.Name.ToString() == akuObj.name) {
+            if(obj.BaseId == akuObj.bid && obj.ObjectKind.ToString() == akuObj.t) {
                 return false;
             }
             log.Debug($"Obj changed in table old: {obj.Name}({obj.BaseId}) new: {obj.Name}/{obj.BaseId}");

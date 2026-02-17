@@ -20,7 +20,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
-    private const string CommandName = "/akut";
+    public ServiceProvider serviceProvider { get; private set; }
 
     public Configuration Configuration { get; init; }
 
@@ -41,12 +41,11 @@ public sealed class Plugin : IDalamudPlugin
         IObjectTable objectTable,
         ITextureSubstitutionProvider textureSubstitutionProvider)
     {
-        Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-
         // You might normally want to embed resources and load them from the manifest stream
-        var goatImagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "goat.png");
+        //var goatImagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "goat.png");
 
-        var serviceProvider = new ServiceCollection()
+        serviceProvider = new ServiceCollection()
+            .AddSingleton(this)
             .AddSingleton(framework)
             .AddSingleton(clientState)
             .AddSingleton(pluginInterface)
@@ -65,12 +64,14 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<ObjTrackManager>()
             .AddSingleton<BottomBar>()
             .AddSingleton(windowSystem)
+            .AddTransient<DetailsWindow>()
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
         ConfigWindow = serviceProvider.GetRequiredService<ConfigWindow>();
         MapWindow = serviceProvider.GetRequiredService<MapWindow>();
         SearchWindow = serviceProvider.GetRequiredService<SearchWindow>();
+        Configuration = serviceProvider.GetRequiredService<Configuration>();
 
 
         windowSystem.AddWindow(ConfigWindow);
@@ -78,7 +79,7 @@ public sealed class Plugin : IDalamudPlugin
         windowSystem.AddWindow(MapWindow);
         windowSystem.AddWindow(SearchWindow);
 
-        CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+        CommandManager.AddHandler("/akut", new CommandInfo((string command, string args) => { ToggleMainUi(); })
         {
             HelpMessage = "Opens the main menu with debug information."
         });
@@ -86,7 +87,7 @@ public sealed class Plugin : IDalamudPlugin
         CommandManager.AddHandler("/akum", new CommandInfo((string command, string args) => { MapWindow.Toggle(); }) {
             HelpMessage = "Opens the map window."
         });
-        CommandManager.AddHandler("/akuc", new CommandInfo((string command, string args) => { ConfigWindow.Toggle(); }) {
+        CommandManager.AddHandler("/akuc", new CommandInfo((string command, string args) => { ToggleConfigUi(); }) {
             HelpMessage = "Opens the configuration window."
         });
 
@@ -115,18 +116,15 @@ public sealed class Plugin : IDalamudPlugin
         
         windowSystem.RemoveAllWindows();
 
+        MapWindow.Dispose();
+        SearchWindow.Dispose();
         ConfigWindow.Dispose();
         MainWindow.Dispose();
 
-        CommandManager.RemoveHandler(CommandName);
+        CommandManager.RemoveHandler("/akut");
+        CommandManager.RemoveHandler("/akum");
+        CommandManager.RemoveHandler("/aku");
     }
-
-    private void OnCommand(string command, string args)
-    {
-        // In response to the slash command, toggle the display status of our main ui
-        MainWindow.Toggle();
-    }
-    
     public void ToggleConfigUi() => ConfigWindow.Toggle();
     public void ToggleMainUi() => MainWindow.Toggle();
 }
