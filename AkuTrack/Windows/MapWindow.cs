@@ -298,18 +298,18 @@ public class MapWindow : Window, IDisposable
         {
             if (!configuration.DrawEObj)
                 return;
-            if (obj.bid == 2000401)
+            if (obj.bid == 2000401) // summoning bell
                 DrawIcon(60425, obj.pos, obj.r, obj.tint);
-            else if (obj.bid == 2000402)
+            else if (obj.bid == 2000402) // market board
                 DrawIcon(60570, obj.pos, obj.r, obj.tint);
-            else if (obj.bid == 2000470)
+            else if (obj.bid == 2000470) // company chest
                 DrawIcon(60460, obj.pos, obj.r, obj.tint);
             else
                 DrawIcon(60353, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "BattleNpc")
         {
-            if(!configuration.DrawBNpc)
+            if (!configuration.DrawBNpc)
                 return;
             DrawIcon(60422, obj.pos, obj.r, obj.tint);
         }
@@ -334,6 +334,8 @@ public class MapWindow : Window, IDisposable
             }
             DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r, obj.tint);
         }
+        else if (obj.t == "Treasure")
+            DrawIcon(60354, obj.pos, obj.r, obj.tint);
         else
             DrawIcon(60515, obj.pos, obj.r, obj.tint);
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
