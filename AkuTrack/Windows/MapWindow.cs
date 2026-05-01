@@ -43,6 +43,7 @@ public class MapWindow : Window, IDisposable
     private readonly WindowSystem windowSystem;
     private readonly IDataManager dataManager;
     private readonly IClientState clientState;
+    private readonly IObjectTable objectTable;
     private readonly IPluginLog log;
     private readonly ITextureProvider textureProvider;
     private readonly ITextureSubstitutionProvider textureSubstitutionProvider;
@@ -79,6 +80,7 @@ public class MapWindow : Window, IDisposable
         WindowSystem windowSystem,
         IDataManager dataManager,
         IClientState clientState,
+        IObjectTable objectTable,
         ITextureProvider textureProvider,
         ITextureSubstitutionProvider textureSubstitutionProvider,
         IPluginLog log
@@ -90,6 +92,7 @@ public class MapWindow : Window, IDisposable
         this.log = log;
         this.dataManager = dataManager;
         this.clientState = clientState;
+        this.objectTable = objectTable;
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
         this.bottomBar = bottomBar;
@@ -154,7 +157,7 @@ public class MapWindow : Window, IDisposable
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
         if (currentMap == clientState.MapId)
         {
-            if (clientState.LocalPlayer is { } localPlayer)
+            if (objectTable.LocalPlayer is { } localPlayer)
             {
                 DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
             }

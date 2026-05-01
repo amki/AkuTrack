@@ -29,7 +29,7 @@ namespace AkuTrack.Windows
         private bool fr = false;
         private bool ja = false;
         private string input = "";
-        private IEnumerable<Lumina.Excel.Sheets.Item> results;
+        private IEnumerable<Lumina.Excel.Sheets.Item>? results;
         public SearchWindow(IPluginLog log,
             IDataManager dataManager,
             ITextureProvider textureProvider,
