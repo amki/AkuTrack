@@ -1,6 +1,7 @@
 using AkuTrack.Managers;
 using AkuTrack.Windows;
 using Dalamud.Game.Command;
+using Dalamud.Game.Gui;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -20,6 +21,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
 
     public ServiceProvider serviceProvider { get; private set; }
 
@@ -31,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
     private MapWindow MapWindow { get; init; }
     private SearchWindow SearchWindow { get; init; }
     private UploadManager UploadManager { get; init; }
+    private bool wasGameMapVisible;
 
     public Plugin(
         IFramework framework,
@@ -39,6 +42,7 @@ public sealed class Plugin : IDalamudPlugin
         IDataManager dataManager,
         ITextureProvider textureProvider,
         IChatGui chatGui,
+        IGameGui gameGui,
         IPluginLog pluginLog,
         IObjectTable objectTable,
         ITextureSubstitutionProvider textureSubstitutionProvider)
@@ -54,6 +58,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(dataManager)
             .AddSingleton(textureProvider)
             .AddSingleton(chatGui)
+            .AddSingleton(gameGui)
             .AddSingleton(pluginLog)
             .AddSingleton(objectTable)
             .AddSingleton(textureSubstitutionProvider)
@@ -105,6 +110,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
 
         clientState.Login += OnLogin;
+        framework.Update += OnFrameworkUpdate;
         _ = UploadManager.ReloadChestDropsAsync();
 
         // Add a simple message to the log with level set to information
@@ -120,6 +126,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         ClientState.Login -= OnLogin;
+        serviceProvider.GetRequiredService<IFramework>().Update -= OnFrameworkUpdate;
         
         windowSystem.RemoveAllWindows();
 
@@ -135,8 +142,38 @@ public sealed class Plugin : IDalamudPlugin
     public void ToggleConfigUi() => ConfigWindow.Toggle();
     public void ToggleMainUi() => MainWindow.Toggle();
 
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        if (!Configuration.ToggleMapWithGameMap)
+        {
+            wasGameMapVisible = IsGameMapVisible();
+            return;
+        }
+
+        var isGameMapVisible = IsGameMapVisible();
+        if (isGameMapVisible == wasGameMapVisible)
+        {
+            return;
+        }
+
+        wasGameMapVisible = isGameMapVisible;
+        MapWindow.IsOpen = isGameMapVisible;
+    }
+
     private void OnLogin()
     {
         _ = UploadManager.ReloadChestDropsAsync();
+    }
+
+    private static bool IsGameMapVisible()
+    {
+        var areaMap = GameGui.GetAddonByName("AreaMap", 1);
+        if (!areaMap.IsNull && areaMap.IsVisible)
+        {
+            return true;
+        }
+
+        var naviMap = GameGui.GetAddonByName("NaviMap", 1);
+        return !naviMap.IsNull && naviMap.IsVisible;
     }
 }

@@ -100,6 +100,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var toggleMapWithGameMap = configuration.ToggleMapWithGameMap;
+        if (ImGui.Checkbox("Sync with game map (M)?", ref toggleMapWithGameMap))
+        {
+            configuration.ToggleMapWithGameMap = toggleMapWithGameMap;
+            configuration.Save();
+        }
+
         //ImGui.ColorEdit4("EINEFARBE##1", (float*)&color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | base_flags);
 
         ImGui.TextColored(new Vector4(1.0f, 0.0f, 1.0f, 1.0f), "Map Text Color:");
