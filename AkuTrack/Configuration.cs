@@ -15,6 +15,7 @@ public class Configuration : IPluginConfiguration
     public bool DrawENpc { get; set; } = true;
     public bool DrawEObj { get; set; } = true;
     public bool DrawGatheringPoint { get; set; } = true;
+    public bool DrawTreasure { get; set; } = true;
     public bool DrawDebugSquares { get; set; } = false;
 
     public Vector4 TextColor { get; set; } = new Vector4(1.0f, 0.0f, 1.0f, 1.0f);

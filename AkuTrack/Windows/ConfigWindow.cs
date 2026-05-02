@@ -85,7 +85,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
-        
+        var drawTreasure = configuration.DrawTreasure;
+        if (ImGui.Checkbox("Draw Treasure?", ref drawTreasure))
+        {
+            configuration.DrawTreasure = drawTreasure;
+            configuration.Save();
+        }
+
         var drawDebugSquares = configuration.DrawDebugSquares;
         if (ImGui.Checkbox("Draw debug squares?", ref drawDebugSquares))
         {
