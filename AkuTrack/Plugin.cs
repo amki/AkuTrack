@@ -44,6 +44,10 @@ public sealed class Plugin : IDalamudPlugin
         // You might normally want to embed resources and load them from the manifest stream
         //var goatImagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "goat.png");
 
+        var configuration = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        configuration.Version = 0;
+        pluginInterface.SavePluginConfig(configuration);
+
         serviceProvider = new ServiceCollection()
             .AddSingleton(this)
             .AddSingleton(framework)
@@ -55,7 +59,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(pluginLog)
             .AddSingleton(objectTable)
             .AddSingleton(textureSubstitutionProvider)
-            .AddSingleton<Configuration>()
+            .AddSingleton(configuration)
             .AddSingleton<MainWindow>()
             .AddSingleton<ConfigWindow>()
             .AddSingleton<MapWindow>()
