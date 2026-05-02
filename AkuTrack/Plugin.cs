@@ -6,6 +6,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.IO;
 
 namespace AkuTrack;
@@ -29,6 +30,7 @@ public sealed class Plugin : IDalamudPlugin
     private MainWindow MainWindow { get; init; }
     private MapWindow MapWindow { get; init; }
     private SearchWindow SearchWindow { get; init; }
+    private UploadManager UploadManager { get; init; }
 
     public Plugin(
         IFramework framework,
@@ -72,6 +74,7 @@ public sealed class Plugin : IDalamudPlugin
         MapWindow = serviceProvider.GetRequiredService<MapWindow>();
         SearchWindow = serviceProvider.GetRequiredService<SearchWindow>();
         Configuration = serviceProvider.GetRequiredService<Configuration>();
+        UploadManager = serviceProvider.GetRequiredService<UploadManager>();
 
 
         windowSystem.AddWindow(ConfigWindow);
@@ -101,6 +104,9 @@ public sealed class Plugin : IDalamudPlugin
         // Adds another button doing the same but for the main ui of the plugin
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
 
+        clientState.Login += OnLogin;
+        _ = UploadManager.ReloadChestDropsAsync();
+
         // Add a simple message to the log with level set to information
         // Use /xllog to open the log window in-game
         // Example Output: 00:57:54.959 | INF | [SamplePlugin] ===A cool log message from Sample Plugin===
@@ -113,6 +119,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.Draw -= windowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
+        ClientState.Login -= OnLogin;
         
         windowSystem.RemoveAllWindows();
 
@@ -127,4 +134,9 @@ public sealed class Plugin : IDalamudPlugin
     }
     public void ToggleConfigUi() => ConfigWindow.Toggle();
     public void ToggleMainUi() => MainWindow.Toggle();
+
+    private void OnLogin()
+    {
+        _ = UploadManager.ReloadChestDropsAsync();
+    }
 }
