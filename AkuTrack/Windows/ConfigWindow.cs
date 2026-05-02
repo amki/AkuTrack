@@ -96,10 +96,9 @@ public class ConfigWindow : Window, IDisposable
 
         //ImGui.ColorEdit4("EINEFARBE##1", (float*)&color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | base_flags);
 
-        ImGui.TextColored(new Vector4(1.0f, 0.0f, 1.0f, 1.0f), "Map Text Color:");
+        ImGui.TextUnformatted("Map Text Color:");
         var textColor = configuration.TextColor;
-        ImGui.ColorEdit4("EINEFARBE##1", ref textColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel | ImGuiColorEditFlags.DefaultOptions);
-        if (ImGui.Button("Sef"))
+        if (ImGui.ColorEdit4("##map_text_color", ref textColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel | ImGuiColorEditFlags.DefaultOptions))
         {
             log.Debug($"Set TextColor to {textColor}");
             configuration.TextColor = textColor;
