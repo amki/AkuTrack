@@ -51,6 +51,8 @@ public class DetailsWindow : Window, IDisposable
     private readonly ITextureProvider textureProvider;
     private readonly UploadManager uploadManager;
     private readonly ChestRewardClassFilter classFilter;
+    private readonly EnpcShopResolver enpcShopResolver;
+    private readonly EnpcShopRenderer enpcShopRenderer;
 
     private readonly AkuGameObject obj;
     private ChestRewardSortMode chestRewardSortMode = ChestRewardSortMode.Name;
@@ -70,6 +72,8 @@ public class DetailsWindow : Window, IDisposable
         this.textureProvider = textureProvider;
         this.uploadManager = uploadManager;
         this.classFilter = new ChestRewardClassFilter(dataManager, clienState.ClientLanguage);
+        this.enpcShopResolver = new EnpcShopResolver(dataManager, clienState.ClientLanguage);
+        this.enpcShopRenderer = new EnpcShopRenderer(textureProvider, ItemIconSize);
         this.log.Debug("Construct Window");
         this.obj = obj;
         SizeConstraints = new WindowSizeConstraints
@@ -134,6 +138,15 @@ public class DetailsWindow : Window, IDisposable
             return;
         }
         ImGui.LabelText("", $"Name: {StringExtensions.ToUpper(eNpcResident.Singular.ToString(), true, true, false, clientState.ClientLanguage)}");
+
+        var shops = enpcShopResolver.Resolve(obj.bid);
+        if (shops.Count == 0)
+        {
+            return;
+        }
+
+        ImGui.Separator();
+        enpcShopRenderer.Draw(shops);
     }
 
     private void DrawGatheringPointDetails() {
