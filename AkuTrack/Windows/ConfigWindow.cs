@@ -94,6 +94,20 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var toggleMapWithGameMap = configuration.ToggleMapWithGameMap;
+        if (ImGui.Checkbox("Sync with game map (M)?", ref toggleMapWithGameMap))
+        {
+            configuration.ToggleMapWithGameMap = toggleMapWithGameMap;
+            configuration.Save();
+        }
+
+        var centerOnPlayerWhenOpening = configuration.CenterOnPlayerWhenOpening;
+        if (ImGui.Checkbox("Center on Player when opening", ref centerOnPlayerWhenOpening))
+        {
+            configuration.CenterOnPlayerWhenOpening = centerOnPlayerWhenOpening;
+            configuration.Save();
+        }
+
         //ImGui.ColorEdit4("EINEFARBE##1", (float*)&color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | base_flags);
 
         ImGui.TextUnformatted("Map Text Color:");

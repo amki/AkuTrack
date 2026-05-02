@@ -108,6 +108,16 @@ public class MapWindow : Window, IDisposable
 
     public void Dispose() { }
 
+    public override void OnOpen()
+    {
+        if (!configuration.CenterOnPlayerWhenOpening)
+        {
+            return;
+        }
+
+        CenterOnLocalPlayer();
+    }
+
     public unsafe override void Draw()
     {
         UpdateDrawOffset();
@@ -555,6 +565,16 @@ public class MapWindow : Window, IDisposable
         var mapCenterOffset = new Vector2(1024.0f, 1024.0f) * Scale;
 
         DrawPosition = childCenterOffset - mapCenterOffset + (DrawOffset * Scale);
+    }
+
+    private void CenterOnLocalPlayer()
+    {
+        if (objectTable.LocalPlayer is not { } localPlayer)
+        {
+            return;
+        }
+
+        DrawOffset = -(GetPlayerMapPosition(localPlayer.Position) + GetMapOffsetVector());
     }
 
     private static Vector2[] GetRotationVectors(float angle, Vector2 center, Vector2 size)
