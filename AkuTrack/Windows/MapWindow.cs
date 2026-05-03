@@ -47,6 +47,7 @@ public class MapWindow : Window, IDisposable
     private readonly IPluginLog log;
     private readonly ITextureProvider textureProvider;
     private readonly ITextureSubstitutionProvider textureSubstitutionProvider;
+    private readonly EnpcShopResolver enpcShopResolver;
 
     private float Scale { get; set; } = 1;
     public Vector2 DrawOffset { get; set; }
@@ -99,6 +100,7 @@ public class MapWindow : Window, IDisposable
         this.windowSystem = windowSystem;
         this.textureProvider = textureProvider;
         this.textureSubstitutionProvider = textureSubstitutionProvider;
+        this.enpcShopResolver = new EnpcShopResolver(dataManager, clientState.ClientLanguage);
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(375, 330),
@@ -302,7 +304,8 @@ public class MapWindow : Window, IDisposable
         {
             if (!configuration.DrawENpc)
                 return;
-            DrawIcon(60424, obj.pos, obj.r, obj.tint);
+            // check if we need special icons for ENPCs currently implemented for TrippleTriad
+            DrawIcon(enpcShopResolver.GetPreferredMapIconId(obj.bid), obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "EventObj")
         {

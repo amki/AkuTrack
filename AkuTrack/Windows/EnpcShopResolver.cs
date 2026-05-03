@@ -7,10 +7,20 @@ using System.Linq;
 
 namespace AkuTrack.Windows;
 
-internal sealed class EnpcShopResolver
+public sealed class EnpcShopResolver
 {
+    public const int DefaultEnpcIconId = 60424;
+    public const int TripleTriadEnpcIconId = 66471;
+
     private const uint GilIconId = 65002;
     private const uint FreeCompanyCreditIconId = 65011;
+    private static readonly string[] TripleTriadKeywords =
+    [
+        "triple triad",
+        "triple triade",
+        "triad",
+        "トリプルトライアド",
+    ];
 
     private static readonly Dictionary<uint, uint> TomestoneItems = new()
     {
@@ -21,6 +31,7 @@ internal sealed class EnpcShopResolver
 
     private readonly IDataManager dataManager;
     private readonly ClientLanguage clientLanguage;
+    private readonly Dictionary<uint, int> iconCache = [];
 
     internal sealed class ShopEntry
     {
@@ -60,7 +71,7 @@ internal sealed class EnpcShopResolver
         this.clientLanguage = clientLanguage;
     }
 
-    public List<ShopEntry> Resolve(uint enpcId)
+    internal List<ShopEntry> Resolve(uint enpcId)
     {
         if (!dataManager.GetExcelSheet<ENpcBase>().TryGetRow(enpcId, out var enpcBase))
         {
@@ -94,6 +105,18 @@ internal sealed class EnpcShopResolver
             .ToList();
     }
 
+    internal int GetPreferredMapIconId(uint enpcId)
+    {
+        if (iconCache.TryGetValue(enpcId, out var cachedIconId))
+        {
+            return cachedIconId;
+        }
+
+        var iconId = ResolvePreferredMapIconId(enpcId);
+        iconCache[enpcId] = iconId;
+        return iconId;
+    }
+
     private IEnumerable<ShopEntry> ResolveTopicSelect(TopicSelect topicSelect)
     {
         var topicLabel = topicSelect.Name.ToString();
@@ -114,6 +137,87 @@ internal sealed class EnpcShopResolver
                 yield return shopEntry;
             }
         }
+    }
+
+    private int ResolvePreferredMapIconId(uint enpcId)
+    {
+        if (!dataManager.GetExcelSheet<ENpcBase>().TryGetRow(enpcId, out var enpcBase))
+        {
+            return DefaultEnpcIconId;
+        }
+
+        foreach (var rowRef in enpcBase.ENpcData)
+        {
+            if (rowRef.RowId == 0)
+            {
+                continue;
+            }
+
+            if (IsTripleTriadRow(rowRef))
+            {
+                return TripleTriadEnpcIconId;
+            }
+
+            if (rowRef.TryGetValue<TopicSelect>(out var topicSelect))
+            {
+                foreach (var topicRowRef in topicSelect.Shop)
+                {
+                    if (topicRowRef.RowId == 0)
+                    {
+                        continue;
+                    }
+
+                    if (IsTripleTriadRow(topicRowRef))
+                    {
+                        return TripleTriadEnpcIconId;
+                    }
+                }
+            }
+        }
+
+        return DefaultEnpcIconId;
+    }
+
+    private bool IsTripleTriadRow(Lumina.Excel.RowRef rowRef)
+    {
+        if (rowRef.TryGetValue<TripleTriad>(out _))
+        {
+            return true;
+        }
+
+        return rowRef.TryGetValue<SpecialShop>(out var specialShop) && IsTripleTriadSpecialShop(specialShop);
+    }
+
+    private bool IsTripleTriadSpecialShop(SpecialShop shop)
+    {
+        if (HasTripleTriadKeyword(shop.Name.ToString()))
+        {
+            return true;
+        }
+
+        if (dataManager.GetExcelSheet<SpecialShop>(clientLanguage).TryGetRow(shop.RowId, out var localizedShop)
+            && HasTripleTriadKeyword(localizedShop.Name.ToString()))
+        {
+            return true;
+        }
+
+        if (dataManager.GetExcelSheet<SpecialShop>(ClientLanguage.English).TryGetRow(shop.RowId, out var englishShop)
+            && HasTripleTriadKeyword(englishShop.Name.ToString()))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasTripleTriadKeyword(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return TripleTriadKeywords.Any(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool TryResolveShop(Lumina.Excel.RowRef rowRef, string? topicLabel, out ShopEntry shopEntry)
