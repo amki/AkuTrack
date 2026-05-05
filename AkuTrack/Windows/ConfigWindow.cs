@@ -92,6 +92,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var drawPartyMembers = configuration.DrawPartyMembers;
+        if (ImGui.Checkbox("Draw party members?", ref drawPartyMembers))
+        {
+            configuration.DrawPartyMembers = drawPartyMembers;
+            configuration.Save();
+        }
+
         var drawDebugSquares = configuration.DrawDebugSquares;
         if (ImGui.Checkbox("Draw debug squares?", ref drawDebugSquares))
         {

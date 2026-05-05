@@ -19,6 +19,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
+    [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
@@ -45,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
         IGameGui gameGui,
         IPluginLog pluginLog,
         IObjectTable objectTable,
+        IPartyList partyList,
         ITextureSubstitutionProvider textureSubstitutionProvider)
     {
         // You might normally want to embed resources and load them from the manifest stream
@@ -58,6 +60,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(this)
             .AddSingleton(framework)
             .AddSingleton(clientState)
+            .AddSingleton(partyList)
             .AddSingleton(pluginInterface)
             .AddSingleton(dataManager)
             .AddSingleton(textureProvider)

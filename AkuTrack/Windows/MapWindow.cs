@@ -2,6 +2,7 @@ using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game;
+using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.FontIdentifier;
@@ -44,6 +45,7 @@ public class MapWindow : Window, IDisposable
     private readonly IDataManager dataManager;
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
+    private readonly IPartyList partyList;
     private readonly IPluginLog log;
     private readonly ITextureProvider textureProvider;
     private readonly ITextureSubstitutionProvider textureSubstitutionProvider;
@@ -61,6 +63,7 @@ public class MapWindow : Window, IDisposable
     private uint currentTerritory = 0;
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
+    private Vector2 currentMapScreenPosition = new(0, 0);
 
     private List<AkuGameObject> clickedObjects = new();
 
@@ -82,6 +85,7 @@ public class MapWindow : Window, IDisposable
         IDataManager dataManager,
         IClientState clientState,
         IObjectTable objectTable,
+        IPartyList partyList,
         ITextureProvider textureProvider,
         ITextureSubstitutionProvider textureSubstitutionProvider,
         IPluginLog log
@@ -94,6 +98,7 @@ public class MapWindow : Window, IDisposable
         this.dataManager = dataManager;
         this.clientState = clientState;
         this.objectTable = objectTable;
+        this.partyList = partyList;
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
         this.bottomBar = bottomBar;
@@ -133,7 +138,7 @@ public class MapWindow : Window, IDisposable
 
         using (var renderChild = ImRaii.Child("render_child", ImGui.GetContentRegionAvail(), false, ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoScrollbar))
         {
-            
+            currentMapScreenPosition = ImGui.GetWindowPos();
             DrawMapElements();
             currentMapPixelSize = ImGui.GetWindowSize();
 
@@ -165,7 +170,7 @@ public class MapWindow : Window, IDisposable
         {
             HoveredFlags |= HoverFlags.MapTexture;
         }
-        
+
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
         if (currentMap == clientState.MapId)
         {
@@ -173,6 +178,7 @@ public class MapWindow : Window, IDisposable
             {
                 DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
             }
+            DrawPartyMemberIcons();
             foreach (var o in objTrackManager.seenList)
             {
                 DrawAkuGameObject(o.Value);
@@ -204,6 +210,8 @@ public class MapWindow : Window, IDisposable
             // FIXME: How to get markers from region maps?!?
             //log.Debug($"Could not find Markers for Territory {currentTerritory}");
         }
+
+        DrawFlagMarker();
     }
 
     private unsafe void DrawMapBackground()
@@ -479,21 +487,95 @@ public class MapWindow : Window, IDisposable
         return false;
     }
 
-    private void DrawPlayerIcon(Vector3 pos, float rotation)
+    private bool DrawPlayerIcon(Vector3 pos, float rotation)
+    {
+        return DrawPlayerIcon(pos, rotation, Vector4.One);
+    }
+
+    private bool DrawPlayerIcon(Vector3 pos, float rotation, Vector4 tint)
     {
         var texture = textureProvider.GetFromGameIcon(60443).GetWrapOrEmpty();
         var angle = -rotation + MathF.PI / 2.0f;
+        var size = texture.Size / 2.0f * Scale;
 
-        var p = ImGui.GetWindowPos() +
+        var p = currentMapScreenPosition +
                            DrawPosition +
                            (GetPlayerMapPosition(pos) +
                             GetMapOffsetVector() +
                             GetMapCenterOffsetVector()) * Scale;
         //var p = ((GetMapCoordinateFor3D(pos)) * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
-        var vectors = GetRotationVectors(angle, p, texture.Size / 2.0f * Scale);
+        var vectors = GetRotationVectors(angle, p, size);
 
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
-        ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3]);
+        ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3], Vector2.Zero, new Vector2(1, 0), Vector2.One, new Vector2(0, 1), ImGui.GetColorU32(tint));
+        return IsBoundedBy(ImGui.GetMousePos(), p - size / 2.0f, p + size / 2.0f);
+    }
+
+    private void DrawPartyMemberIcons()
+    {
+        if (!configuration.DrawPartyMembers || partyList.Length == 0)
+        {
+            return;
+        }
+
+        foreach (var member in partyList)
+        {
+            if (objectTable.LocalPlayer is { } localPlayer && member.EntityId == localPlayer.GameObjectId)
+            {
+                continue;
+            }
+
+            var memberObject = objectTable.SearchById(member.EntityId);
+            if (memberObject is null || memberObject.ObjectKind != ObjectKind.Pc)
+            {
+                continue;
+            }
+
+            if (DrawPlayerIcon(memberObject.Position, memberObject.Rotation, new Vector4(0.3f, 0.85f, 1.0f, 1.0f)))
+            {
+                ImGui.SetTooltip($"Party Member: {member.Name}");
+            }
+        }
+    }
+
+    private unsafe void DrawFlagMarker()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap->FlagMarkerCount == 0)
+        {
+            return;
+        }
+
+        var flag = agentMap->FlagMapMarkers[0];
+        if (flag.MapId != currentMap || flag.TerritoryId != currentTerritory)
+        {
+            return;
+        }
+
+        var position = new Vector3(flag.XFloat, 0, flag.YFloat);
+        var iconId = flag.MapMarker.IconId == 0 ? 60561 : flag.MapMarker.IconId;
+        DrawFlagIcon((int)iconId, position);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip($"Flag: {flag.XFloat:F1}, {flag.YFloat:F1}");
+        }
+    }
+
+    private void DrawFlagIcon(int iconid, Vector3 position)
+    {
+        var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
+        var size = texture.Size / 2.0f;
+        var p = ((GetMapCoordinateFor3D(position)) * Scale) + DrawPosition - size / 2.0f;
+
+        if (configuration.DrawDebugSquares)
+        {
+            ImGui.SetCursorPos(p);
+            var cursorPos = ImGui.GetCursorScreenPos();
+            ImGui.GetWindowDrawList().AddRect(cursorPos, cursorPos + size, ImGui.GetColorU32(configuration.TextColor), 3.0f);
+        }
+
+        ImGui.SetCursorPos(p);
+        ImGui.Image(texture.Handle, size);
     }
 
     private void ProcessInputs() {
@@ -506,6 +588,7 @@ public class MapWindow : Window, IDisposable
             else
             {
                 ProcessMouseScroll();
+                ProcessMapFlagClick();
                 ProcessMapDragStart();
                 Flags |= ImGuiWindowFlags.NoMove;
             }
@@ -525,6 +608,21 @@ public class MapWindow : Window, IDisposable
 
         Scale += ZoomSpeed * ImGui.GetIO().MouseWheel;
         Scale = Math.Clamp(Scale, 0.25f, 100.0f);
+    }
+
+    private unsafe void ProcessMapFlagClick()
+    {
+        if (!HoveredFlags.HasFlag(HoverFlags.MapTexture)) return;
+        if (!ImGui.GetIO().KeyCtrl) return;
+        if (!ImGui.IsMouseClicked(ImGuiMouseButton.Right)) return;
+
+        var mapCoordinate = GetMouseMapCoordinate();
+        if (!IsBoundedBy(mapCoordinate, Vector2.Zero, new Vector2(2048, 2048)))
+        {
+            return;
+        }
+
+        AgentMap.Instance()->SetFlagMapMarker(currentTerritory, currentMap, GetWorldPositionForMapCoordinate(mapCoordinate));
     }
 
     private void ProcessMapDragStart()
@@ -580,6 +678,11 @@ public class MapWindow : Window, IDisposable
         DrawOffset = -(GetPlayerMapPosition(localPlayer.Position) + GetMapOffsetVector());
     }
 
+    private Vector2 GetMouseMapCoordinate()
+    {
+        return (ImGui.GetMousePos() - currentMapScreenPosition - DrawPosition) / Scale;
+    }
+
     private static Vector2[] GetRotationVectors(float angle, Vector2 center, Vector2 size)
     {
         var cosA = MathF.Cos(angle + 0.5f * MathF.PI);
@@ -600,6 +703,11 @@ public class MapWindow : Window, IDisposable
         var twoD = new Vector2(pos.X, pos.Z);
         var mapcoord = ((twoD + GetRawMapOffsetVector()) * GetMapScaleFactor()) + GetMapCenterOffsetVector();
         return mapcoord;
+    }
+    public static Vector3 GetWorldPositionForMapCoordinate(Vector2 mapCoordinate)
+    {
+        var twoD = ((mapCoordinate - GetMapCenterOffsetVector()) / GetMapScaleFactor()) - GetRawMapOffsetVector();
+        return new Vector3(twoD.X, 0, twoD.Y);
     }
     public static Vector2 GetPlayerMapPosition(Vector3 vec) => new Vector2(vec.X, vec.Z) * GetMapScaleFactor();
     private static Vector2 ImRotate(Vector2 v, float cosA, float sinA) => new(v.X * cosA - v.Y * sinA, v.X * sinA + v.Y * cosA);

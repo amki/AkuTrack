@@ -16,6 +16,7 @@ public class Configuration : IPluginConfiguration
     public bool DrawEObj { get; set; } = true;
     public bool DrawGatheringPoint { get; set; } = true;
     public bool DrawTreasure { get; set; } = true;
+    public bool DrawPartyMembers { get; set; } = true;
     public bool DrawDebugSquares { get; set; } = false;
     public bool ToggleMapWithGameMap { get; set; } = false;
     public bool CenterOnPlayerWhenOpening { get; set; } = false;
