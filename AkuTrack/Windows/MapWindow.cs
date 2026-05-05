@@ -181,7 +181,7 @@ public class MapWindow : Window, IDisposable
         {
             if (objectTable.LocalPlayer is { } localPlayer)
             {
-                DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
+                DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation, GetPlayerMarkerTint(localPlayer, Vector4.One));
             }
             DrawPartyMemberIcons();
             foreach (var o in objTrackManager.seenList)
@@ -536,11 +536,45 @@ public class MapWindow : Window, IDisposable
                 continue;
             }
 
-            if (DrawPlayerIcon(memberObject.Position, memberObject.Rotation, new Vector4(0.3f, 0.85f, 1.0f, 1.0f)))
+            var tint = GetPlayerMarkerTint(member.ClassJob.RowId, new Vector4(0.3f, 0.85f, 1.0f, 1.0f));
+            if (DrawPlayerIcon(memberObject.Position, memberObject.Rotation, tint))
             {
                 ImGui.SetTooltip($"Party Member: {member.Name}");
             }
         }
+    }
+
+    private Vector4 GetPlayerMarkerTint(IGameObject gameObject, Vector4 fallback)
+    {
+        if (!configuration.ColorPlayerMarkersByClass || gameObject is not ICharacter character)
+        {
+            return fallback;
+        }
+
+        return GetPlayerMarkerTint(character.ClassJob.RowId, fallback);
+    }
+
+    private Vector4 GetPlayerMarkerTint(uint classJobId, Vector4 fallback)
+    {
+        if (!configuration.ColorPlayerMarkersByClass)
+        {
+            return fallback;
+        }
+
+        return classJobId switch
+        {
+            // Tanks
+            19 or 21 or 32 or 37 => new Vector4(0.25f, 0.48f, 1.0f, 1.0f),
+            // Healers
+            24 or 28 or 33 or 40 => new Vector4(0.25f, 0.95f, 0.45f, 1.0f),
+            // DPS
+            20 or 22 or 23 or 25 or 27 or 30 or 31 or 34 or 35 or 38 or 39 or 41 or 42 => new Vector4(1.0f, 0.25f, 0.25f, 1.0f),
+            // Crafters
+            >= 8 and <= 15 => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            // Gatherers
+            >= 16 and <= 18 => new Vector4(0.35f, 0.9f, 0.85f, 1.0f),
+            _ => fallback,
+        };
     }
 
     private unsafe void DrawFlagMarker()

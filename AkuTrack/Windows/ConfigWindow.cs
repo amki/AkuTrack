@@ -99,6 +99,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var colorPlayerMarkersByClass = configuration.ColorPlayerMarkersByClass;
+        if (ImGui.Checkbox("Color player markers by class?", ref colorPlayerMarkersByClass))
+        {
+            configuration.ColorPlayerMarkersByClass = colorPlayerMarkersByClass;
+            configuration.Save();
+        }
+
         var drawDebugSquares = configuration.DrawDebugSquares;
         if (ImGui.Checkbox("Draw debug squares?", ref drawDebugSquares))
         {
