@@ -43,6 +43,7 @@ public class MapWindow : Window, IDisposable
     private readonly UploadManager uploadManager;
     private readonly WindowSystem windowSystem;
     private readonly IDataManager dataManager;
+    private readonly IFramework framework;
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
     private readonly IPartyList partyList;
@@ -52,6 +53,7 @@ public class MapWindow : Window, IDisposable
     private readonly EnpcShopResolver enpcShopResolver;
 
     private float Scale { get; set; } = 1;
+    private const uint FlagTextCommandParamId = 1048;
     public Vector2 DrawOffset { get; set; }
     public HoverFlags HoveredFlags { get; private set; }
     public Vector2 DrawPosition { get; private set; }
@@ -64,6 +66,7 @@ public class MapWindow : Window, IDisposable
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
     private Vector2 currentMapScreenPosition = new(0, 0);
+    private bool suppressFlagPlacement;
 
     private List<AkuGameObject> clickedObjects = new();
 
@@ -83,6 +86,7 @@ public class MapWindow : Window, IDisposable
         BottomBar bottomBar,
         WindowSystem windowSystem,
         IDataManager dataManager,
+        IFramework framework,
         IClientState clientState,
         IObjectTable objectTable,
         IPartyList partyList,
@@ -96,6 +100,7 @@ public class MapWindow : Window, IDisposable
         this.configuration = configuration;
         this.log = log;
         this.dataManager = dataManager;
+        this.framework = framework;
         this.clientState = clientState;
         this.objectTable = objectTable;
         this.partyList = partyList;
@@ -558,6 +563,11 @@ public class MapWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip($"Flag: {flag.XFloat:F1}, {flag.YFloat:F1}");
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+            {
+                agentMap->FlagMarkerCount = 0;
+                suppressFlagPlacement = true;
+            }
         }
     }
 
@@ -612,6 +622,12 @@ public class MapWindow : Window, IDisposable
 
     private unsafe void ProcessMapFlagClick()
     {
+        if (suppressFlagPlacement)
+        {
+            suppressFlagPlacement = false;
+            return;
+        }
+
         if (!HoveredFlags.HasFlag(HoverFlags.MapTexture)) return;
         if (!ImGui.GetIO().KeyCtrl) return;
         if (!ImGui.IsMouseClicked(ImGuiMouseButton.Right)) return;
@@ -623,6 +639,7 @@ public class MapWindow : Window, IDisposable
         }
 
         AgentMap.Instance()->SetFlagMapMarker(currentTerritory, currentMap, GetWorldPositionForMapCoordinate(mapCoordinate));
+        framework.RunOnTick(() => AgentChatLog.Instance()->InsertTextCommandParam(FlagTextCommandParamId, false));
     }
 
     private void ProcessMapDragStart()
