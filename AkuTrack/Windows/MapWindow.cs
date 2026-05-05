@@ -599,22 +599,16 @@ public class MapWindow : Window, IDisposable
             1 => new Vector4(0.25f, 0.48f, 1.0f, 1.0f),
             2 or 6 => new Vector4(0.25f, 0.95f, 0.45f, 1.0f),
             3 or 4 or 5 => new Vector4(1.0f, 0.05f, 0.05f, 1.0f),
-            _ when IsCrafter(classJob) => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
-            _ when IsGatherer(classJob) => new Vector4(0.35f, 0.9f, 0.85f, 1.0f),
+            _ when IsClassJobCategory(classJob, "Disciple of the Hand") => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            _ when IsClassJobCategory(classJob, "Disciple of the Land") => new Vector4(0.35f, 0.9f, 0.85f, 1.0f),
             _ => fallback,
         };
     }
 
-    private static bool IsCrafter(Lumina.Excel.Sheets.ClassJob classJob)
+    private bool IsClassJobCategory(Lumina.Excel.Sheets.ClassJob classJob, string englishCategoryName)
     {
-        var abbreviation = classJob.Abbreviation.ToString();
-        return abbreviation is "CRP" or "BSM" or "ARM" or "GSM" or "LTW" or "WVR" or "ALC" or "CUL";
-    }
-
-    private static bool IsGatherer(Lumina.Excel.Sheets.ClassJob classJob)
-    {
-        var abbreviation = classJob.Abbreviation.ToString();
-        return abbreviation is "MIN" or "BTN" or "FSH";
+        return dataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJobCategory>(ClientLanguage.English).TryGetRow(classJob.ClassJobCategory.RowId, out var category)
+               && category.Name.ToString() == englishCategoryName;
     }
 
     private unsafe void DrawFlagMarker()
