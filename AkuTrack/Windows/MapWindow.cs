@@ -67,6 +67,8 @@ public class MapWindow : Window, IDisposable
     private Vector2 currentMapPixelSize = new(0, 0);
     private Vector2 currentMapScreenPosition = new(0, 0);
     private bool suppressFlagPlacement;
+    private bool pendingFlagFocus;
+    private (uint TerritoryId, uint MapId, float X, float Y)? lastFocusedFlag;
 
     private List<AkuGameObject> clickedObjects = new();
 
@@ -119,6 +121,26 @@ public class MapWindow : Window, IDisposable
     }
 
     public void Dispose() { }
+
+    public unsafe void FocusCurrentFlagMarkerIfNeeded()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null || agentMap->FlagMarkerCount == 0)
+        {
+            lastFocusedFlag = null;
+            return;
+        }
+
+        var flag = agentMap->FlagMapMarkers[0];
+        var focusedFlag = (flag.TerritoryId, flag.MapId, flag.XFloat, flag.YFloat);
+        if (lastFocusedFlag == focusedFlag)
+        {
+            return;
+        }
+
+        lastFocusedFlag = focusedFlag;
+        pendingFlagFocus = true;
+    }
 
     public override void OnOpen()
     {
@@ -175,6 +197,7 @@ public class MapWindow : Window, IDisposable
         {
             HoveredFlags |= HoverFlags.MapTexture;
         }
+        ProcessPendingFlagFocus();
 
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
         if (currentMap == clientState.MapId)
@@ -494,14 +517,19 @@ public class MapWindow : Window, IDisposable
 
     private bool DrawPlayerIcon(Vector3 pos, float rotation)
     {
-        return DrawPlayerIcon(pos, rotation, Vector4.One);
+        return DrawPlayerIcon(pos, rotation, Vector4.One, 1.0f);
     }
 
     private bool DrawPlayerIcon(Vector3 pos, float rotation, Vector4 tint)
     {
+        return DrawPlayerIcon(pos, rotation, tint, 1.0f);
+    }
+
+    private bool DrawPlayerIcon(Vector3 pos, float rotation, Vector4 tint, float iconScale)
+    {
         var texture = textureProvider.GetFromGameIcon(60443).GetWrapOrEmpty();
         var angle = -rotation + MathF.PI / 2.0f;
-        var size = texture.Size / 2.0f * Scale;
+        var size = texture.Size / 2.0f * Scale * iconScale;
 
         var p = currentMapScreenPosition +
                            DrawPosition +
@@ -537,7 +565,7 @@ public class MapWindow : Window, IDisposable
             }
 
             var tint = GetPlayerMarkerTint(member.ClassJob.RowId, new Vector4(0.3f, 0.85f, 1.0f, 1.0f));
-            if (DrawPlayerIcon(memberObject.Position, memberObject.Rotation, tint))
+            if (DrawPlayerIcon(memberObject.Position, memberObject.Rotation, tint, 0.75f))
             {
                 ImGui.SetTooltip($"Party Member: {member.Name}");
             }
@@ -561,20 +589,32 @@ public class MapWindow : Window, IDisposable
             return fallback;
         }
 
-        return classJobId switch
+        if (!dataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().TryGetRow(classJobId, out var classJob))
         {
-            // Tanks
-            19 or 21 or 32 or 37 => new Vector4(0.25f, 0.48f, 1.0f, 1.0f),
-            // Healers
-            24 or 28 or 33 or 40 => new Vector4(0.25f, 0.95f, 0.45f, 1.0f),
-            // DPS
-            20 or 22 or 23 or 25 or 27 or 30 or 31 or 34 or 35 or 38 or 39 or 41 or 42 => new Vector4(1.0f, 0.25f, 0.25f, 1.0f),
-            // Crafters
-            >= 8 and <= 15 => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
-            // Gatherers
-            >= 16 and <= 18 => new Vector4(0.35f, 0.9f, 0.85f, 1.0f),
+            return fallback;
+        }
+
+        return classJob.JobType switch
+        {
+            1 => new Vector4(0.25f, 0.48f, 1.0f, 1.0f),
+            2 or 6 => new Vector4(0.25f, 0.95f, 0.45f, 1.0f),
+            3 or 4 or 5 => new Vector4(1.0f, 0.05f, 0.05f, 1.0f),
+            _ when IsCrafter(classJob) => new Vector4(0.95f, 0.75f, 0.25f, 1.0f),
+            _ when IsGatherer(classJob) => new Vector4(0.35f, 0.9f, 0.85f, 1.0f),
             _ => fallback,
         };
+    }
+
+    private static bool IsCrafter(Lumina.Excel.Sheets.ClassJob classJob)
+    {
+        var abbreviation = classJob.Abbreviation.ToString();
+        return abbreviation is "CRP" or "BSM" or "ARM" or "GSM" or "LTW" or "WVR" or "ALC" or "CUL";
+    }
+
+    private static bool IsGatherer(Lumina.Excel.Sheets.ClassJob classJob)
+    {
+        var abbreviation = classJob.Abbreviation.ToString();
+        return abbreviation is "MIN" or "BTN" or "FSH";
     }
 
     private unsafe void DrawFlagMarker()
@@ -600,6 +640,7 @@ public class MapWindow : Window, IDisposable
             if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
             {
                 agentMap->FlagMarkerCount = 0;
+                lastFocusedFlag = null;
                 suppressFlagPlacement = true;
             }
         }
@@ -672,7 +713,10 @@ public class MapWindow : Window, IDisposable
             return;
         }
 
-        AgentMap.Instance()->SetFlagMapMarker(currentTerritory, currentMap, GetWorldPositionForMapCoordinate(mapCoordinate));
+        var agentMap = AgentMap.Instance();
+        agentMap->SetFlagMapMarker(currentTerritory, currentMap, GetWorldPositionForMapCoordinate(mapCoordinate));
+        var flag = agentMap->FlagMapMarkers[0];
+        lastFocusedFlag = (flag.TerritoryId, flag.MapId, flag.XFloat, flag.YFloat);
         framework.RunOnTick(() => AgentChatLog.Instance()->InsertTextCommandParam(FlagTextCommandParamId, false));
     }
 
@@ -726,7 +770,36 @@ public class MapWindow : Window, IDisposable
             return;
         }
 
-        DrawOffset = -(GetPlayerMapPosition(localPlayer.Position) + GetMapOffsetVector());
+        CenterOnWorldPosition(localPlayer.Position);
+    }
+
+    private unsafe void ProcessPendingFlagFocus()
+    {
+        if (!pendingFlagFocus)
+        {
+            return;
+        }
+
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null || agentMap->FlagMarkerCount == 0)
+        {
+            pendingFlagFocus = false;
+            return;
+        }
+
+        var flag = agentMap->FlagMapMarkers[0];
+        if (flag.MapId != currentMap || flag.TerritoryId != currentTerritory)
+        {
+            return;
+        }
+
+        CenterOnWorldPosition(new Vector3(flag.XFloat, 0, flag.YFloat));
+        pendingFlagFocus = false;
+    }
+
+    private void CenterOnWorldPosition(Vector3 position)
+    {
+        DrawOffset = GetMapCenterOffsetVector() - GetMapCoordinateFor3D(position);
     }
 
     private Vector2 GetMouseMapCoordinate()

@@ -151,13 +151,15 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        var isGameMapVisible = IsGameMapVisible();
+        MapWindow.FocusCurrentFlagMarkerIfNeeded();
+
         if (!Configuration.ToggleMapWithGameMap)
         {
-            wasGameMapVisible = IsGameMapVisible();
+            wasGameMapVisible = isGameMapVisible;
             return;
         }
 
-        var isGameMapVisible = IsGameMapVisible();
         if (isGameMapVisible == wasGameMapVisible)
         {
             return;
