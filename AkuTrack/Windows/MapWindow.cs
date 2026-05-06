@@ -38,6 +38,8 @@ namespace AkuTrack.Windows;
 
 public class MapWindow : Window, IDisposable
 {
+    private readonly record struct ClickedPlayer(string Name, uint EntityId, Vector3 Position);
+
     private readonly Plugin plugin;
     private readonly Configuration configuration;
     private readonly ObjTrackManager objTrackManager;
@@ -73,6 +75,7 @@ public class MapWindow : Window, IDisposable
     private (uint TerritoryId, uint MapId, float X, float Y)? lastFocusedFlag;
 
     private List<AkuGameObject> clickedObjects = new();
+    private List<ClickedPlayer> clickedPlayers = new();
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly BottomBar bottomBar;
@@ -193,12 +196,14 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapElements() {
-        if (clickedObjects.Count > 0)
+        if (clickedObjects.Count > 0 || clickedPlayers.Count > 0)
         {
-            DrawAkuObjectContextMenu(clickedObjects);
+            DrawAkuObjectContextMenu();
             if(!ImGui.IsPopupOpen("AkuTrack_AkuObject_Context_Menu")) {
                 if(clickedObjects.Count > 0)
                     clickedObjects.Clear();
+                if (clickedPlayers.Count > 0)
+                    clickedPlayers.Clear();
             }
         }
         DrawMapBackground();
@@ -221,6 +226,7 @@ public class MapWindow : Window, IDisposable
                 DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation, GetPlayerMarkerTint(localPlayer, Vector4.One));
             }
             DrawPartyMemberIcons();
+            DrawOtherPlayerIcons();
             foreach (var o in objTrackManager.seenList)
             {
                 DrawAkuGameObject(o.Value);
@@ -405,6 +411,7 @@ public class MapWindow : Window, IDisposable
         {
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
             clickedObjects.Add(obj);
+            AddNearbyOtherPlayersToSelection();
         }
         if (ImGui.IsItemHovered())
         {
@@ -417,12 +424,12 @@ public class MapWindow : Window, IDisposable
         ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
     }
 
-    public void DrawAkuObjectContextMenu(List<AkuGameObject> objs)
+    public void DrawAkuObjectContextMenu()
     {
         using var contextMenu = ImRaii.ContextPopup("AkuTrack_AkuObject_Context_Menu");
         if (!contextMenu) return;
 
-        foreach (var obj in objs)
+        foreach (var obj in clickedObjects)
         {
             if (ImGui.MenuItem($"{obj.t} {obj.name}({obj.bid})"))
             {
@@ -437,6 +444,11 @@ public class MapWindow : Window, IDisposable
                 windowSystem.AddWindow(dw);
                 dw.Toggle();
             }
+        }
+
+        foreach (var player in clickedPlayers)
+        {
+            ImGui.MenuItem($"Player {player.Name}");
         }
     }
 
@@ -624,6 +636,103 @@ public class MapWindow : Window, IDisposable
                 ImGui.SetTooltip($"Party Member: {member.Name}");
             }
         }
+    }
+
+    private void DrawOtherPlayerIcons()
+    {
+        if (!configuration.DrawOtherPlayers)
+        {
+            return;
+        }
+
+        foreach (var gameObject in objectTable)
+        {
+            if (gameObject is null || !IsOtherPlayer(gameObject) || gameObject is not ICharacter character)
+            {
+                continue;
+            }
+
+            if (DrawOtherPlayerCircle(gameObject.Position))
+            {
+                ImGui.SetTooltip($"Player: {character.Name}");
+                if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+                {
+                    ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+                    AddClickedPlayer(character);
+                }
+            }
+        }
+    }
+
+    private bool DrawOtherPlayerCircle(Vector3 position)
+    {
+        var center = GetMapScreenPosition(position);
+        var radius = MathF.Max(3.0f, 4.0f * Scale);
+        var fillColor = ImGui.GetColorU32(new Vector4(0.15f, 0.65f, 1.0f, 0.9f));
+        var outlineColor = ImGui.GetColorU32(new Vector4(0.02f, 0.18f, 0.45f, 1.0f));
+
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddCircleFilled(center, radius, fillColor, 16);
+        drawList.AddCircle(center, radius, outlineColor, 16, MathF.Max(1.0f, Scale));
+
+        return IsBoundedBy(ImGui.GetMousePos(), center - new Vector2(radius), center + new Vector2(radius));
+    }
+
+    private Vector2 GetMapScreenPosition(Vector3 position)
+    {
+        return currentMapScreenPosition +
+               DrawPosition +
+               (GetPlayerMapPosition(position) +
+                GetMapOffsetVector() +
+                GetMapCenterOffsetVector()) * Scale;
+    }
+
+    private bool IsOtherPlayer(IGameObject gameObject)
+    {
+        if (gameObject.ObjectKind != ObjectKind.Pc)
+        {
+            return false;
+        }
+
+        if (objectTable.LocalPlayer is { } localPlayer && gameObject.EntityId == localPlayer.EntityId)
+        {
+            return false;
+        }
+
+        return !partyList.Any(member => member.EntityId == gameObject.EntityId);
+    }
+
+    private void AddNearbyOtherPlayersToSelection()
+    {
+        if (!configuration.DrawOtherPlayers)
+        {
+            return;
+        }
+
+        const float selectionRadius = 14.0f;
+        var mousePosition = ImGui.GetMousePos();
+        foreach (var gameObject in objectTable)
+        {
+            if (gameObject is null || !IsOtherPlayer(gameObject) || gameObject is not ICharacter character)
+            {
+                continue;
+            }
+
+            if (Vector2.Distance(mousePosition, GetMapScreenPosition(gameObject.Position)) <= selectionRadius)
+            {
+                AddClickedPlayer(character);
+            }
+        }
+    }
+
+    private void AddClickedPlayer(ICharacter character)
+    {
+        if (clickedPlayers.Any(player => player.EntityId == character.EntityId))
+        {
+            return;
+        }
+
+        clickedPlayers.Add(new ClickedPlayer(character.Name.ToString(), character.EntityId, character.Position));
     }
 
     private Vector4 GetPlayerMarkerTint(IGameObject gameObject, Vector4 fallback)

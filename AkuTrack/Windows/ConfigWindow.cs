@@ -99,6 +99,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var drawOtherPlayers = configuration.DrawOtherPlayers;
+        if (ImGui.Checkbox("Draw other players?", ref drawOtherPlayers))
+        {
+            configuration.DrawOtherPlayers = drawOtherPlayers;
+            configuration.Save();
+        }
+
         var colorPlayerMarkersByClass = configuration.ColorPlayerMarkersByClass;
         if (ImGui.Checkbox("Color player markers by class?", ref colorPlayerMarkersByClass))
         {

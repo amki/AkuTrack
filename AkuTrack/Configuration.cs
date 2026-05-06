@@ -17,6 +17,7 @@ public class Configuration : IPluginConfiguration
     public bool DrawGatheringPoint { get; set; } = true;
     public bool DrawTreasure { get; set; } = true;
     public bool DrawPartyMembers { get; set; } = true;
+    public bool DrawOtherPlayers { get; set; } = false;
     public bool ColorPlayerMarkersByClass { get; set; } = false;
     public bool DrawCameraCone { get; set; } = true;
     public bool DrawDebugSquares { get; set; } = false;
