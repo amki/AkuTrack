@@ -135,6 +135,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var keepPlayerCentered = configuration.KeepPlayerCentered;
+        if (ImGui.Checkbox("Keep player centered while moving?", ref keepPlayerCentered))
+        {
+            configuration.KeepPlayerCentered = keepPlayerCentered;
+            configuration.Save();
+        }
+
         //ImGui.ColorEdit4("EINEFARBE##1", (float*)&color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | base_flags);
 
         ImGui.TextUnformatted("Map Text Color:");

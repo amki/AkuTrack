@@ -155,6 +155,11 @@ public class MapWindow : Window, IDisposable
 
     public unsafe override void Draw()
     {
+        if (configuration.KeepPlayerCentered && currentMap == clientState.MapId)
+        {
+            CenterOnLocalPlayer();
+        }
+
         UpdateDrawOffset();
 
         HoveredFlags = HoverFlags.Nothing;
