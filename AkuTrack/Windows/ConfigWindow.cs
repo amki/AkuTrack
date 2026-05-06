@@ -106,6 +106,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var drawCameraCone = configuration.DrawCameraCone;
+        if (ImGui.Checkbox("Draw camera cone?", ref drawCameraCone))
+        {
+            configuration.DrawCameraCone = drawCameraCone;
+            configuration.Save();
+        }
+
         var drawDebugSquares = configuration.DrawDebugSquares;
         if (ImGui.Checkbox("Draw debug squares?", ref drawDebugSquares))
         {

@@ -14,6 +14,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
@@ -204,6 +205,11 @@ public class MapWindow : Window, IDisposable
         {
             if (objectTable.LocalPlayer is { } localPlayer)
             {
+                if (configuration.DrawCameraCone)
+                {
+                    DrawCameraCone(localPlayer.Position);
+                }
+
                 DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation, GetPlayerMarkerTint(localPlayer, Vector4.One));
             }
             DrawPartyMemberIcons();
@@ -542,6 +548,46 @@ public class MapWindow : Window, IDisposable
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
         ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3], Vector2.Zero, new Vector2(1, 0), Vector2.One, new Vector2(0, 1), ImGui.GetColorU32(tint));
         return IsBoundedBy(ImGui.GetMousePos(), p - size / 2.0f, p + size / 2.0f);
+    }
+
+    private unsafe void DrawCameraCone(Vector3 pos)
+    {
+        var cameraManager = CameraManager.Instance();
+        if (cameraManager == null)
+        {
+            return;
+        }
+
+        var camera = cameraManager->GetActiveCamera();
+        if (camera == null)
+        {
+            return;
+        }
+
+        var center = currentMapScreenPosition +
+                     DrawPosition +
+                     (GetPlayerMapPosition(pos) +
+                      GetMapOffsetVector() +
+                      GetMapCenterOffsetVector()) * Scale;
+
+        var angle = -camera->CalculateSceneCameraYaw() + MathF.PI * 1.5f;
+        var direction = AngleToDirection(angle);
+        const float halfConeAngle = MathF.PI / 5.5f;
+        var coneOrigin = center - direction * (7.0f * Scale);
+        var coneLength = 36.0f * Scale;
+        var left = coneOrigin + AngleToDirection(angle - halfConeAngle) * coneLength;
+        var right = coneOrigin + AngleToDirection(angle + halfConeAngle) * coneLength;
+
+        var fillColor = ImGui.GetColorU32(new Vector4(0.05f, 0.75f, 1.0f, 0.28f));
+        var lineColor = ImGui.GetColorU32(new Vector4(0.25f, 0.9f, 1.0f, 0.85f));
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddTriangleFilled(coneOrigin, left, right, fillColor);
+        drawList.AddTriangle(coneOrigin, left, right, lineColor, MathF.Max(1.0f, Scale));
+    }
+
+    private static Vector2 AngleToDirection(float angle)
+    {
+        return new Vector2(MathF.Cos(angle), MathF.Sin(angle));
     }
 
     private void DrawPartyMemberIcons()
