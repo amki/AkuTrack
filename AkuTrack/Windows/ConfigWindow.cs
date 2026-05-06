@@ -92,6 +92,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var drawFates = configuration.DrawFates;
+        if (ImGui.Checkbox("Draw FATEs?", ref drawFates))
+        {
+            configuration.DrawFates = drawFates;
+            configuration.Save();
+        }
+
         var drawPartyMembers = configuration.DrawPartyMembers;
         if (ImGui.Checkbox("Draw party members?", ref drawPartyMembers))
         {

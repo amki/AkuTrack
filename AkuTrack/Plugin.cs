@@ -47,6 +47,7 @@ public sealed class Plugin : IDalamudPlugin
         IPluginLog pluginLog,
         IObjectTable objectTable,
         IPartyList partyList,
+        IFateTable fateTable,
         ITextureSubstitutionProvider textureSubstitutionProvider)
     {
         // You might normally want to embed resources and load them from the manifest stream
@@ -68,6 +69,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(gameGui)
             .AddSingleton(pluginLog)
             .AddSingleton(objectTable)
+            .AddSingleton(fateTable)
             .AddSingleton(textureSubstitutionProvider)
             .AddSingleton(configuration)
             .AddSingleton<MainWindow>()

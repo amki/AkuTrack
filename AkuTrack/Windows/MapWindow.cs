@@ -2,6 +2,7 @@ using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game;
+using Dalamud.Game.ClientState.Fates;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Text.SeStringHandling;
@@ -38,7 +39,7 @@ namespace AkuTrack.Windows;
 
 public class MapWindow : Window, IDisposable
 {
-    private readonly record struct ClickedPlayer(string Name, uint EntityId, Vector3 Position);
+    private readonly record struct ClickedPlayer(string Name, uint EntityId, Vector3 Position, bool IsFriend);
 
     private readonly Plugin plugin;
     private readonly Configuration configuration;
@@ -50,6 +51,7 @@ public class MapWindow : Window, IDisposable
     private readonly IClientState clientState;
     private readonly IObjectTable objectTable;
     private readonly IPartyList partyList;
+    private readonly IFateTable fateTable;
     private readonly IPluginLog log;
     private readonly ITextureProvider textureProvider;
     private readonly ITextureSubstitutionProvider textureSubstitutionProvider;
@@ -97,6 +99,7 @@ public class MapWindow : Window, IDisposable
         IClientState clientState,
         IObjectTable objectTable,
         IPartyList partyList,
+        IFateTable fateTable,
         ITextureProvider textureProvider,
         ITextureSubstitutionProvider textureSubstitutionProvider,
         IPluginLog log
@@ -111,6 +114,7 @@ public class MapWindow : Window, IDisposable
         this.clientState = clientState;
         this.objectTable = objectTable;
         this.partyList = partyList;
+        this.fateTable = fateTable;
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
         this.bottomBar = bottomBar;
@@ -259,6 +263,7 @@ public class MapWindow : Window, IDisposable
             //log.Debug($"Could not find Markers for Territory {currentTerritory}");
         }
 
+        DrawFateMarkers();
         DrawFlagMarker();
     }
 
@@ -448,7 +453,7 @@ public class MapWindow : Window, IDisposable
 
         foreach (var player in clickedPlayers)
         {
-            ImGui.MenuItem($"Player {player.Name}");
+            ImGui.MenuItem($"{(player.IsFriend ? "Friend" : "Player")} {player.Name}");
         }
     }
 
@@ -652,30 +657,93 @@ public class MapWindow : Window, IDisposable
                 continue;
             }
 
-            if (DrawOtherPlayerCircle(gameObject.Position))
+            var isFriend = IsFriend(character);
+            if (DrawOtherPlayerCircle(gameObject.Position, isFriend))
             {
-                ImGui.SetTooltip($"Player: {character.Name}");
+                ImGui.SetTooltip($"{(isFriend ? "Friend" : "Player")}: {character.Name}");
                 if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
                 {
                     ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
-                    AddClickedPlayer(character);
+                    AddClickedPlayer(character, isFriend);
                 }
             }
         }
     }
 
-    private bool DrawOtherPlayerCircle(Vector3 position)
+    private bool DrawOtherPlayerCircle(Vector3 position, bool isFriend)
     {
         var center = GetMapScreenPosition(position);
         var radius = MathF.Max(3.0f, 4.0f * Scale);
-        var fillColor = ImGui.GetColorU32(new Vector4(0.15f, 0.65f, 1.0f, 0.9f));
-        var outlineColor = ImGui.GetColorU32(new Vector4(0.02f, 0.18f, 0.45f, 1.0f));
+        var fillColor = ImGui.GetColorU32(isFriend
+            ? new Vector4(0.1f, 1.0f, 0.55f, 0.95f)
+            : new Vector4(0.15f, 0.65f, 1.0f, 0.9f));
+        var outlineColor = ImGui.GetColorU32(isFriend
+            ? new Vector4(0.0f, 0.35f, 0.16f, 1.0f)
+            : new Vector4(0.02f, 0.18f, 0.45f, 1.0f));
 
         var drawList = ImGui.GetWindowDrawList();
         drawList.AddCircleFilled(center, radius, fillColor, 16);
         drawList.AddCircle(center, radius, outlineColor, 16, MathF.Max(1.0f, Scale));
 
         return IsBoundedBy(ImGui.GetMousePos(), center - new Vector2(radius), center + new Vector2(radius));
+    }
+
+    private void DrawFateMarkers()
+    {
+        if (!configuration.DrawFates)
+        {
+            return;
+        }
+
+        foreach (var fate in fateTable)
+        {
+            if (fate is null || !fateTable.IsValid(fate))
+            {
+                continue;
+            }
+
+            if (fate.TerritoryType.RowId != currentTerritory || fate.State is not (FateState.Preparing or FateState.Running))
+            {
+                continue;
+            }
+
+            DrawFateMarker(fate);
+        }
+    }
+
+    private void DrawFateMarker(IFate fate)
+    {
+        var center = GetMapScreenPosition(fate.Position);
+        var radius = fate.Radius * GetMapScaleFactor() * Scale;
+        var drawList = ImGui.GetWindowDrawList();
+        var radiusFillColor = ImGui.GetColorU32(new Vector4(0.35f, 0.2f, 0.75f, 0.12f));
+        var radiusLineColor = ImGui.GetColorU32(new Vector4(0.55f, 0.35f, 1.0f, 0.65f));
+
+        if (radius > 1.0f)
+        {
+            drawList.AddCircleFilled(center, radius, radiusFillColor, 48);
+            drawList.AddCircle(center, radius, radiusLineColor, 48, MathF.Max(1.0f, Scale));
+        }
+
+        var iconId = fate.MapIconId != 0 ? fate.MapIconId : fate.IconId;
+        if (iconId != 0)
+        {
+            var texture = textureProvider.GetFromGameIcon(iconId).GetWrapOrEmpty();
+            var size = texture.Size / 2.0f;
+            drawList.AddImage(texture.Handle, center - size / 2.0f, center + size / 2.0f);
+        }
+
+        var iconHoverRadius = 14.0f;
+        if (Vector2.Distance(ImGui.GetMousePos(), center) <= MathF.Max(iconHoverRadius, MathF.Min(radius, 32.0f)))
+        {
+            ImGui.SetTooltip($"FATE: {fate.Name}\nLevel: {fate.Level}\nProgress: {fate.Progress}%\nTime: {FormatTimeRemaining(fate.TimeRemaining)}");
+        }
+    }
+
+    private static string FormatTimeRemaining(long seconds)
+    {
+        seconds = Math.Max(0, seconds);
+        return $"{seconds / 60}:{seconds % 60:00}";
     }
 
     private Vector2 GetMapScreenPosition(Vector3 position)
@@ -720,19 +788,24 @@ public class MapWindow : Window, IDisposable
 
             if (Vector2.Distance(mousePosition, GetMapScreenPosition(gameObject.Position)) <= selectionRadius)
             {
-                AddClickedPlayer(character);
+                AddClickedPlayer(character, IsFriend(character));
             }
         }
     }
 
-    private void AddClickedPlayer(ICharacter character)
+    private void AddClickedPlayer(ICharacter character, bool isFriend)
     {
         if (clickedPlayers.Any(player => player.EntityId == character.EntityId))
         {
             return;
         }
 
-        clickedPlayers.Add(new ClickedPlayer(character.Name.ToString(), character.EntityId, character.Position));
+        clickedPlayers.Add(new ClickedPlayer(character.Name.ToString(), character.EntityId, character.Position, isFriend));
+    }
+
+    private static bool IsFriend(ICharacter character)
+    {
+        return character.StatusFlags.HasFlag(StatusFlags.Friend);
     }
 
     private Vector4 GetPlayerMarkerTint(IGameObject gameObject, Vector4 fallback)
