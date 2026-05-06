@@ -15,6 +15,7 @@ public class Configuration : IPluginConfiguration
     public bool DrawENpc { get; set; } = true;
     public bool DrawEObj { get; set; } = true;
     public bool DrawGatheringPoint { get; set; } = true;
+    public bool DrawCameraCone { get; set; } = true;
     public bool DrawDebugSquares { get; set; } = false;
     public bool ToggleMapWithGameMap { get; set; } = false;
     public bool CenterOnPlayerWhenOpening { get; set; } = false;

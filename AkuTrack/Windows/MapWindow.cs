@@ -13,6 +13,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
@@ -60,6 +61,7 @@ public class MapWindow : Window, IDisposable
     private uint currentTerritory = 0;
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
+    private Vector2 currentMapScreenPosition = new(0, 0);
 
     private List<AkuGameObject> clickedObjects = new();
 
@@ -131,7 +133,7 @@ public class MapWindow : Window, IDisposable
 
         using (var renderChild = ImRaii.Child("render_child", ImGui.GetContentRegionAvail(), false, ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoScrollbar))
         {
-            
+            currentMapScreenPosition = ImGui.GetWindowPos();
             DrawMapElements();
             currentMapPixelSize = ImGui.GetWindowSize();
 
@@ -169,6 +171,11 @@ public class MapWindow : Window, IDisposable
         {
             if (objectTable.LocalPlayer is { } localPlayer)
             {
+                if (configuration.DrawCameraCone)
+                {
+                    DrawCameraCone(localPlayer.Position);
+                }
+
                 DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
             }
             foreach (var o in objTrackManager.seenList)
@@ -491,6 +498,46 @@ public class MapWindow : Window, IDisposable
 
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
         ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3]);
+    }
+
+    private unsafe void DrawCameraCone(Vector3 pos)
+    {
+        var cameraManager = CameraManager.Instance();
+        if (cameraManager == null)
+        {
+            return;
+        }
+
+        var camera = cameraManager->GetActiveCamera();
+        if (camera == null)
+        {
+            return;
+        }
+
+        var center = currentMapScreenPosition +
+                     DrawPosition +
+                     (GetPlayerMapPosition(pos) +
+                      GetMapOffsetVector() +
+                      GetMapCenterOffsetVector()) * Scale;
+
+        var angle = -camera->CalculateSceneCameraYaw() + MathF.PI * 1.5f;
+        var direction = AngleToDirection(angle);
+        const float halfConeAngle = MathF.PI / 5.5f;
+        var coneOrigin = center - direction * (7.0f * Scale);
+        var coneLength = 36.0f * Scale;
+        var left = coneOrigin + AngleToDirection(angle - halfConeAngle) * coneLength;
+        var right = coneOrigin + AngleToDirection(angle + halfConeAngle) * coneLength;
+
+        var fillColor = ImGui.GetColorU32(new Vector4(0.05f, 0.75f, 1.0f, 0.28f));
+        var lineColor = ImGui.GetColorU32(new Vector4(0.25f, 0.9f, 1.0f, 0.85f));
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddTriangleFilled(coneOrigin, left, right, fillColor);
+        drawList.AddTriangle(coneOrigin, left, right, lineColor, MathF.Max(1.0f, Scale));
+    }
+
+    private static Vector2 AngleToDirection(float angle)
+    {
+        return new Vector2(MathF.Cos(angle), MathF.Sin(angle));
     }
 
     private void ProcessInputs() {
