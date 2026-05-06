@@ -60,6 +60,7 @@ public class MapWindow : Window, IDisposable
     public Vector2 DrawPosition { get; private set; }
     private Vector2 lastWindowSize;
     private bool isDragStarted = false;
+    private bool keepPlayerCenteredPaused = false;
     private IDalamudTextureWrap? blendedTexture;
     private string currentPath = string.Empty;
     private uint currentMap = 0;
@@ -145,6 +146,8 @@ public class MapWindow : Window, IDisposable
 
     public override void OnOpen()
     {
+        keepPlayerCenteredPaused = false;
+
         if (!configuration.CenterOnPlayerWhenOpening)
         {
             return;
@@ -155,7 +158,7 @@ public class MapWindow : Window, IDisposable
 
     public unsafe override void Draw()
     {
-        if (configuration.KeepPlayerCentered && currentMap == clientState.MapId)
+        if (configuration.KeepPlayerCentered && !keepPlayerCenteredPaused && currentMap == clientState.MapId)
         {
             CenterOnLocalPlayer();
         }
@@ -787,6 +790,7 @@ public class MapWindow : Window, IDisposable
     {
         if (ImGui.IsMouseDragging(ImGuiMouseButton.Left) && isDragStarted)
         {
+            keepPlayerCenteredPaused = true;
             DrawOffset += ImGui.GetMouseDragDelta() / Scale;
             ImGui.ResetMouseDragDelta();
         }

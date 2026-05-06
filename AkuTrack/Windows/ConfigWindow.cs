@@ -136,7 +136,7 @@ public class ConfigWindow : Window, IDisposable
         }
 
         var keepPlayerCentered = configuration.KeepPlayerCentered;
-        if (ImGui.Checkbox("Keep player centered while moving?", ref keepPlayerCentered))
+        if (ImGui.Checkbox("Keep player centered until manual pan?", ref keepPlayerCentered))
         {
             configuration.KeepPlayerCentered = keepPlayerCentered;
             configuration.Save();
