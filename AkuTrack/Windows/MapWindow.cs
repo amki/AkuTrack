@@ -217,19 +217,16 @@ public class MapWindow : Window, IDisposable
         }
         ProcessPendingFlagFocus();
 
+        var drawPlayerMarkersInBackground = ImGui.GetIO().KeyCtrl;
+
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
         if (currentMap == clientState.MapId)
         {
-            if (objectTable.LocalPlayer is { } localPlayer)
+            if (drawPlayerMarkersInBackground)
             {
-                if (configuration.DrawCameraCone)
-                {
-                    DrawCameraCone(localPlayer.Position);
-                }
-
-                DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation, GetPlayerMarkerTint(localPlayer, Vector4.One));
+                DrawLocalPlayerAndPartyIcons();
             }
-            DrawPartyMemberIcons();
+
             DrawOtherPlayerIcons();
             foreach (var o in objTrackManager.seenList)
             {
@@ -265,6 +262,11 @@ public class MapWindow : Window, IDisposable
 
         DrawFateMarkers();
         DrawFlagMarker();
+
+        if (currentMap == clientState.MapId && !drawPlayerMarkersInBackground)
+        {
+            DrawLocalPlayerAndPartyIcons();
+        }
     }
 
     private unsafe void DrawMapBackground()
@@ -613,6 +615,21 @@ public class MapWindow : Window, IDisposable
     private static Vector2 AngleToDirection(float angle)
     {
         return new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+    }
+
+    private void DrawLocalPlayerAndPartyIcons()
+    {
+        if (objectTable.LocalPlayer is { } localPlayer)
+        {
+            if (configuration.DrawCameraCone)
+            {
+                DrawCameraCone(localPlayer.Position);
+            }
+
+            DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation, GetPlayerMarkerTint(localPlayer, Vector4.One));
+        }
+
+        DrawPartyMemberIcons();
     }
 
     private void DrawPartyMemberIcons()
