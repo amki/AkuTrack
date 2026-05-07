@@ -16,6 +16,7 @@ using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
@@ -261,12 +262,15 @@ public class MapWindow : Window, IDisposable
         }
 
         DrawFateMarkers();
+        DrawPlacedMapMarkers();
         DrawFlagMarker();
 
         if (currentMap == clientState.MapId && !drawPlayerMarkersInBackground)
         {
             DrawLocalPlayerAndPartyIcons();
         }
+
+        DrawFieldMarkers();
     }
 
     private unsafe void DrawMapBackground()
@@ -891,6 +895,145 @@ public class MapWindow : Window, IDisposable
                 suppressFlagPlacement = true;
             }
         }
+    }
+
+    private unsafe void DrawPlacedMapMarkers()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null)
+        {
+            return;
+        }
+
+        for (var i = 0; i < agentMap->MapMarkerCount && i < agentMap->MapMarkers.Length; i++)
+        {
+            var marker = agentMap->MapMarkers[i];
+            if (marker.DataType != 0 || marker.DataKey != 0)
+            {
+                continue;
+            }
+
+            DrawPlacedMapMarker(marker.MapMarker, string.Empty);
+        }
+
+        for (var i = 0; i < agentMap->TempMapMarkerCount && i < agentMap->TempMapMarkers.Length; i++)
+        {
+            var marker = agentMap->TempMapMarkers[i];
+            DrawPlacedMapMarker(marker.MapMarker, marker.TooltipText.ToString());
+        }
+    }
+
+    private void DrawPlacedMapMarker(MapMarkerBase marker, string tooltip)
+    {
+        var iconId = marker.IconId != 0 ? marker.IconId : marker.SecondaryIconId;
+        if (iconId == 0)
+        {
+            return;
+        }
+
+        var position = GetMapPositionForMarker(marker);
+        if (!IsBoundedBy(position, Vector2.Zero, new Vector2(2048, 2048)))
+        {
+            return;
+        }
+
+        DrawPlacedMapMarkerIcon((int)iconId, position, tooltip);
+    }
+
+    private void DrawPlacedMapMarkerIcon(int iconId, Vector2 mapPosition, string tooltip)
+    {
+        var texture = textureProvider.GetFromGameIcon(iconId).GetWrapOrEmpty();
+        var size = texture.Size / 2.0f;
+        var p = mapPosition * Scale + DrawPosition - size / 2.0f;
+
+        if (configuration.DrawDebugSquares)
+        {
+            ImGui.SetCursorPos(p);
+            var cursorPos = ImGui.GetCursorScreenPos();
+            ImGui.GetWindowDrawList().AddRect(cursorPos, cursorPos + size, ImGui.GetColorU32(configuration.TextColor), 3.0f);
+        }
+
+        ImGui.SetCursorPos(p);
+        ImGui.Image(texture.Handle, size);
+        if (ImGui.IsItemHovered() && !string.IsNullOrWhiteSpace(tooltip))
+        {
+            ImGui.SetTooltip(tooltip);
+        }
+    }
+
+    private unsafe void DrawFieldMarkers()
+    {
+        if (currentMap != clientState.MapId)
+        {
+            return;
+        }
+
+        var markingController = MarkingController.Instance();
+        if (markingController == null)
+        {
+            return;
+        }
+
+        var labels = new[] { "A", "B", "C", "D", "1", "2", "3", "4" };
+        for (var i = 0; i < markingController->FieldMarkers.Length && i < labels.Length; i++)
+        {
+            var marker = markingController->FieldMarkers[i];
+            if (!marker.Active)
+            {
+                continue;
+            }
+
+            DrawFieldMarker(i, labels[i], marker.Position);
+        }
+    }
+
+    private void DrawFieldMarker(int markerIndex, string label, Vector3 position)
+    {
+        var center = GetMapScreenPosition(position);
+        var iconId = GetFieldMarkerIconId(markerIndex);
+        var texture = textureProvider.GetFromGameIcon(iconId).GetWrapOrEmpty();
+        var size = new Vector2(39.0f * ImGuiHelpers.GlobalScale);
+
+        ImGui.GetWindowDrawList().AddImage(texture.Handle, center - size / 2.0f, center + size / 2.0f);
+
+        if (Vector2.Distance(ImGui.GetMousePos(), center) <= size.X / 2.0f)
+        {
+            ImGui.SetTooltip($"Field Marker {label}: {position.X:F1}, {position.Z:F1}");
+        }
+    }
+
+    private static uint GetFieldMarkerIconId(int markerIndex)
+    {
+        return markerIndex switch
+        {
+            0 => 61241,
+            1 => 61242,
+            2 => 61243,
+            3 => 61247,
+            4 => 61244,
+            5 => 61245,
+            6 => 61246,
+            7 => 61248,
+            _ => 61241,
+        };
+    }
+
+    private static Vector2 GetMapPositionForMarker(MapMarkerBase marker)
+    {
+        var rawPosition = new Vector2(marker.X, marker.Y);
+        if (IsBoundedBy(rawPosition, Vector2.Zero, new Vector2(2048, 2048)))
+        {
+            return rawPosition;
+        }
+
+        var worldPosition = new Vector3(marker.X / 16.0f, 0, marker.Y / 16.0f);
+        var mapPosition = GetMapCoordinateFor3D(worldPosition);
+        if (IsBoundedBy(mapPosition, Vector2.Zero, new Vector2(2048, 2048)))
+        {
+            return mapPosition;
+        }
+
+        return rawPosition / 16.0f;
     }
 
     private void DrawFlagIcon(int iconid, Vector3 position)
