@@ -2,10 +2,12 @@ using AkuTrack.Managers;
 using AkuTrack.Windows;
 using Dalamud.Game.Command;
 using Dalamud.Game.Gui;
+using Dalamud.Hooking;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
@@ -35,6 +37,9 @@ public sealed class Plugin : IDalamudPlugin
     private SearchWindow SearchWindow { get; init; }
     private UploadManager UploadManager { get; init; }
     private bool wasGameMapVisible;
+    private readonly Hook<OpenMapDelegate> openMapHook;
+
+    private unsafe delegate void OpenMapDelegate(AgentMap* thisPtr, OpenMapInfo* data);
 
     public Plugin(
         IFramework framework,
@@ -48,6 +53,7 @@ public sealed class Plugin : IDalamudPlugin
         IObjectTable objectTable,
         IPartyList partyList,
         IFateTable fateTable,
+        IGameInteropProvider gameInteropProvider,
         ITextureSubstitutionProvider textureSubstitutionProvider)
     {
         // You might normally want to embed resources and load them from the manifest stream
@@ -89,6 +95,10 @@ public sealed class Plugin : IDalamudPlugin
         SearchWindow = serviceProvider.GetRequiredService<SearchWindow>();
         Configuration = serviceProvider.GetRequiredService<Configuration>();
         UploadManager = serviceProvider.GetRequiredService<UploadManager>();
+        unsafe
+        {
+            openMapHook = gameInteropProvider.HookFromAddress<OpenMapDelegate>((nint)AgentMap.MemberFunctionPointers.OpenMap, OpenMapDetour);
+        }
 
 
         windowSystem.AddWindow(ConfigWindow);
@@ -120,6 +130,7 @@ public sealed class Plugin : IDalamudPlugin
 
         clientState.Login += OnLogin;
         framework.Update += OnFrameworkUpdate;
+        openMapHook.Enable();
         _ = UploadManager.ReloadChestDropsAsync();
 
         // Add a simple message to the log with level set to information
@@ -136,6 +147,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         ClientState.Login -= OnLogin;
         serviceProvider.GetRequiredService<IFramework>().Update -= OnFrameworkUpdate;
+        openMapHook.Dispose();
         
         windowSystem.RemoveAllWindows();
 
@@ -174,6 +186,17 @@ public sealed class Plugin : IDalamudPlugin
     private void OnLogin()
     {
         _ = UploadManager.ReloadChestDropsAsync();
+    }
+
+    private unsafe void OpenMapDetour(AgentMap* thisPtr, OpenMapInfo* data)
+    {
+        var isFlagMapOpen = data != null && data->Type == MapType.FlagMarker;
+        openMapHook.Original(thisPtr, data);
+
+        if (isFlagMapOpen)
+        {
+            MapWindow.FocusCurrentFlagMarkerOnNextDraw();
+        }
     }
 
     private static bool IsGameMapVisible()

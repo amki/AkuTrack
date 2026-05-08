@@ -150,6 +150,13 @@ public class MapWindow : Window, IDisposable
 
         lastFocusedFlag = focusedFlag;
         pendingFlagFocus = true;
+        keepPlayerCenteredPaused = true;
+    }
+
+    public void FocusCurrentFlagMarkerOnNextDraw()
+    {
+        pendingFlagFocus = true;
+        keepPlayerCenteredPaused = true;
     }
 
     public override void OnOpen()
@@ -1184,6 +1191,7 @@ public class MapWindow : Window, IDisposable
             return;
         }
 
+        keepPlayerCenteredPaused = true;
         CenterOnWorldPosition(new Vector3(flag.XFloat, 0, flag.YFloat));
         pendingFlagFocus = false;
     }
