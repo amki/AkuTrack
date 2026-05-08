@@ -53,6 +53,7 @@ public sealed class Plugin : IDalamudPlugin
         IObjectTable objectTable,
         IPartyList partyList,
         IFateTable fateTable,
+        IAetheryteList aetheryteList,
         IGameInteropProvider gameInteropProvider,
         ITextureSubstitutionProvider textureSubstitutionProvider)
     {
@@ -76,6 +77,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(pluginLog)
             .AddSingleton(objectTable)
             .AddSingleton(fateTable)
+            .AddSingleton(aetheryteList)
             .AddSingleton(textureSubstitutionProvider)
             .AddSingleton(configuration)
             .AddSingleton<MainWindow>()

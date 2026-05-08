@@ -41,6 +41,7 @@ namespace AkuTrack.Windows;
 public class MapWindow : Window, IDisposable
 {
     private readonly record struct ClickedPlayer(string Name, uint EntityId, Vector3 Position, bool IsFriend);
+    private readonly record struct ClickedAetheryte(string Name, uint AetheryteId, byte SubIndex, uint GilCost);
 
     private readonly Plugin plugin;
     private readonly Configuration configuration;
@@ -53,6 +54,7 @@ public class MapWindow : Window, IDisposable
     private readonly IObjectTable objectTable;
     private readonly IPartyList partyList;
     private readonly IFateTable fateTable;
+    private readonly IAetheryteList aetheryteList;
     private readonly IPluginLog log;
     private readonly ITextureProvider textureProvider;
     private readonly ITextureSubstitutionProvider textureSubstitutionProvider;
@@ -79,6 +81,7 @@ public class MapWindow : Window, IDisposable
 
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
+    private List<ClickedAetheryte> clickedAetherytes = new();
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly BottomBar bottomBar;
@@ -101,6 +104,7 @@ public class MapWindow : Window, IDisposable
         IObjectTable objectTable,
         IPartyList partyList,
         IFateTable fateTable,
+        IAetheryteList aetheryteList,
         ITextureProvider textureProvider,
         ITextureSubstitutionProvider textureSubstitutionProvider,
         IPluginLog log
@@ -116,6 +120,7 @@ public class MapWindow : Window, IDisposable
         this.objectTable = objectTable;
         this.partyList = partyList;
         this.fateTable = fateTable;
+        this.aetheryteList = aetheryteList;
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
         this.bottomBar = bottomBar;
@@ -208,7 +213,7 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapElements() {
-        if (clickedObjects.Count > 0 || clickedPlayers.Count > 0)
+        if (clickedObjects.Count > 0 || clickedPlayers.Count > 0 || clickedAetherytes.Count > 0)
         {
             DrawAkuObjectContextMenu();
             if(!ImGui.IsPopupOpen("AkuTrack_AkuObject_Context_Menu")) {
@@ -216,6 +221,8 @@ public class MapWindow : Window, IDisposable
                     clickedObjects.Clear();
                 if (clickedPlayers.Count > 0)
                     clickedPlayers.Clear();
+                if (clickedAetherytes.Count > 0)
+                    clickedAetherytes.Clear();
             }
         }
         DrawMapBackground();
@@ -261,7 +268,7 @@ public class MapWindow : Window, IDisposable
                 }
                 var pos = new Vector2(row.X, row.Y);
                 //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
-                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
+                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation, row.PlaceNameSubtext.RowId);
             }
         } catch(ArgumentOutOfRangeException) {
             // FIXME: How to get markers from region maps?!?
@@ -468,6 +475,14 @@ public class MapWindow : Window, IDisposable
         {
             ImGui.MenuItem($"{(player.IsFriend ? "Friend" : "Player")} {player.Name}");
         }
+
+        foreach (var aetheryte in clickedAetherytes)
+        {
+            if (ImGui.MenuItem($"Aetheryte {aetheryte.Name} ({aetheryte.GilCost} gil)"))
+            {
+                TeleportToAetheryte(aetheryte);
+            }
+        }
     }
 
     private void DrawIcon(int iconid, Vector3 position, float rotation, Vector4 tint)
@@ -487,7 +502,7 @@ public class MapWindow : Window, IDisposable
         ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, tint);
     }
 
-    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation)
+    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation, uint placeNameSubtextId = 0)
     {
         if (IsDoubleHousingArea(iconid))
             return;
@@ -514,6 +529,7 @@ public class MapWindow : Window, IDisposable
             var p = (position * Scale) + DrawPosition - (texture.Size / 4.0f);
             ImGui.SetCursorPos(p);
             ImGui.Image(texture.Handle, texture.Size / 2.0f);
+            ProcessAetheryteMapIconClick(placeNameSubtextId);
             if(configuration.DrawDebugSquares)
             {
                 ImGui.SetCursorPos(p);
@@ -669,6 +685,45 @@ public class MapWindow : Window, IDisposable
                 ImGui.SetTooltip($"Party Member: {member.Name}");
             }
         }
+    }
+
+    private void ProcessAetheryteMapIconClick(uint placeNameSubtextId)
+    {
+        if (placeNameSubtextId == 0 || !ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        {
+            return;
+        }
+
+        clickedAetherytes.Clear();
+        foreach (var aetheryte in aetheryteList)
+        {
+            if (aetheryte.TerritoryId != currentTerritory)
+            {
+                continue;
+            }
+
+            var data = aetheryte.AetheryteData.Value;
+            if (!data.IsAetheryte || data.Invisible || data.PlaceName.RowId != placeNameSubtextId)
+            {
+                continue;
+            }
+
+            var clickedAetheryte = new ClickedAetheryte(data.PlaceName.Value.Name.ToString(), aetheryte.AetheryteId, aetheryte.SubIndex, aetheryte.GilCost);
+            if (!clickedAetherytes.Contains(clickedAetheryte))
+            {
+                clickedAetherytes.Add(clickedAetheryte);
+            }
+        }
+
+        if (clickedAetherytes.Count > 0)
+        {
+            ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+        }
+    }
+
+    private static unsafe void TeleportToAetheryte(ClickedAetheryte aetheryte)
+    {
+        Telepo.Instance()->Teleport(aetheryte.AetheryteId, aetheryte.SubIndex);
     }
 
     private void DrawOtherPlayerIcons()
