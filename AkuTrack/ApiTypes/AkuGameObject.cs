@@ -15,6 +15,13 @@ namespace AkuTrack.ApiTypes
 {
     public class AkuGameObject
     {
+        public AkuGameObject()
+        {
+            this.created_at = DateTimeOffset.Now;
+            this.t = string.Empty;
+            this.name = string.Empty;
+        }
+
         public unsafe AkuGameObject(IGameObject obj, IClientState clientState) {
             this.created_at = DateTimeOffset.Now;
             this.t = obj.ObjectKind.ToString();

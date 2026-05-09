@@ -63,7 +63,7 @@ public class DetailsWindow : Window, IDisposable
     // We give this window a constant ID using ###.
     // This allows for labels to be dynamic, like "{FPS Counter}fps###XYZ counter window",
     // and the window ID will always be "###XYZ counter window" for ImGui
-    public DetailsWindow(WindowSystem windowSystem, IPluginLog log, IClientState clienState, IDataManager dataManager, ITextureProvider textureProvider, UploadManager uploadManager, AkuGameObject obj) : base($"AkuTrack - Details for {obj.bid}##akutrack_details_{obj.bid}")
+    public DetailsWindow(WindowSystem windowSystem, IPluginLog log, IClientState clienState, IDataManager dataManager, ITextureProvider textureProvider, UploadManager uploadManager, AkuGameObject obj) : base($"AkuTrack - Details for {obj.t} {obj.bid}##akutrack_details_{obj.t}_{obj.bid}")
     {
         this.windowSystem = windowSystem;
         this.log = log;
@@ -130,6 +130,124 @@ public class DetailsWindow : Window, IDisposable
         else if (obj.t == "GatheringPoint") {
             DrawGatheringPointDetails();
         }
+        else if (obj.t == "Fishingspot")
+        {
+            DrawFishingSpotDetails();
+        }
+        else if (obj.t == "SpearfishingNotebook")
+        {
+            DrawSpearfishingSpotDetails();
+        }
+        else if (obj.t == "Quest")
+        {
+            DrawQuestDetails();
+        }
+        else if (obj.t == "HousingMapMarkerInfo")
+        {
+            DrawBasicMapElementDetails("Housing map marker");
+        }
+        else if (obj.t is "MapMarker" or "PlacedMapMarker" or "Flag" or "FieldMarker")
+        {
+            DrawBasicMapElementDetails(obj.t);
+        }
+        else if (obj.t == "TreasureMaps")
+        {
+            DrawTreasureMapDetails();
+        }
+        else if (obj.t == "FATE" || obj.t == "CEs")
+        {
+            DrawFateDetails();
+        }
+    }
+
+    private void DrawBasicMapElementDetails(string title)
+    {
+        ImGui.LabelText("", title);
+        ImGui.LabelText("", $"Name: {obj.name}");
+        ImGui.LabelText("", $"BaseId: {obj.bid}");
+        ImGui.LabelText("", $"Position: {obj.pos.X:F1}, {obj.pos.Z:F1}");
+    }
+
+    private void DrawQuestDetails()
+    {
+        ImGui.LabelText("", "Quest");
+        if (!dataManager.GetExcelSheet<Quest>(clientState.ClientLanguage).TryGetRow(obj.bid, out var quest))
+        {
+            DrawBasicMapElementDetails("Quest");
+            return;
+        }
+
+        ImGui.LabelText("", $"Name: {quest.Name}");
+        if (quest.IssuerStart.TryGetValue<ENpcResident>(out var issuer))
+        {
+            ImGui.LabelText("", $"Issuer: {issuer.Singular}");
+        }
+        if (quest.JournalGenre.IsValid)
+        {
+            ImGui.LabelText("", $"Journal: {quest.JournalGenre.Value.Name}");
+        }
+        ImGui.LabelText("", $"Level: {quest.ClassJobLevel.FirstOrDefault()}");
+    }
+
+    private void DrawFishingSpotDetails()
+    {
+        ImGui.LabelText("", "Fishing spot");
+        if (!dataManager.GetExcelSheet<FishingSpot>(clientState.ClientLanguage).TryGetRow(obj.bid, out var spot))
+        {
+            DrawBasicMapElementDetails("Fishing spot");
+            return;
+        }
+
+        ImGui.LabelText("", $"Name: {spot.PlaceName.Value.Name}");
+        ImGui.LabelText("", $"Level: {spot.GatheringLevel}");
+        ImGui.LabelText("", $"Radius: {spot.Radius}");
+        DrawItemRefs(spot.Item);
+    }
+
+    private void DrawSpearfishingSpotDetails()
+    {
+        ImGui.LabelText("", "Spearfishing spot");
+        if (!dataManager.GetExcelSheet<SpearfishingNotebook>(clientState.ClientLanguage).TryGetRow(obj.bid, out var spot))
+        {
+            DrawBasicMapElementDetails("Spearfishing spot");
+            return;
+        }
+
+        ImGui.LabelText("", $"Name: {spot.PlaceName.Value.Name}");
+        ImGui.LabelText("", $"Level: {spot.GatheringLevel}");
+        ImGui.LabelText("", $"Radius: {spot.Radius}");
+        DrawGatheringPointBaseItems(spot.GatheringPointBase.Value);
+    }
+
+    private void DrawTreasureMapDetails()
+    {
+        ImGui.LabelText("", "Treasure map");
+        if (!dataManager.GetExcelSheet<TreasureHuntRank>(clientState.ClientLanguage).TryGetRow(obj.bid, out var rank))
+        {
+            DrawBasicMapElementDetails("Treasure map");
+            return;
+        }
+
+        ImGui.LabelText("", $"Name: {rank.ItemName.Value.Name}");
+        ImGui.LabelText("", $"Max party size: {rank.MaxPartySize}");
+        ImGui.LabelText("", $"Position: {obj.pos.X:F1}, {obj.pos.Z:F1}");
+    }
+
+    private void DrawFateDetails()
+    {
+        ImGui.LabelText("", obj.t == "CEs" ? "Critical engagement" : "FATE");
+        if (dataManager.GetExcelSheet<Fate>(clientState.ClientLanguage).TryGetRow(obj.bid, out var fate))
+        {
+            ImGui.LabelText("", $"Name: {fate.Name}");
+            ImGui.LabelText("", $"Level: {fate.ClassJobLevel}");
+            if (!string.IsNullOrWhiteSpace(fate.Description.ToString()))
+            {
+                ImGui.TextWrapped(fate.Description.ToString());
+            }
+            return;
+        }
+
+        DrawBasicMapElementDetails(obj.t);
     }
 
     private void DrawENpcDetails() {
@@ -157,8 +275,13 @@ public class DetailsWindow : Window, IDisposable
         ImGui.LabelText("", $"Type: {gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.Name}");
         ImGui.LabelText("", $"Level: {gatheringPointRow.GatheringPointBase.Value.GatheringLevel}");
         ImGui.LabelText("", $"PlaceName: {gatheringPointRow.PlaceName.Value.Name}");
+        DrawGatheringPointBaseItems(gatheringPointRow.GatheringPointBase.Value);
+    }
+
+    private void DrawGatheringPointBaseItems(GatheringPointBase gatheringPointBase)
+    {
         var c = 0;
-        foreach (var item in gatheringPointRow.GatheringPointBase.Value.Item)
+        foreach (var item in gatheringPointBase.Item)
         {
             c++;
             if (item.TryGetValue<GatheringItem>(out var gatheringItemRow))
@@ -233,6 +356,30 @@ public class DetailsWindow : Window, IDisposable
                     ImGui.EndGroup();
                 }
             }
+        }
+    }
+
+    private void DrawItemRefs(IEnumerable<Lumina.Excel.RowRef<Item>> items)
+    {
+        var c = 0;
+        foreach (var itemRef in items)
+        {
+            c++;
+            if (!itemRef.IsValid)
+            {
+                continue;
+            }
+
+            var item = itemRef.Value;
+            if (item.RowId == 0)
+            {
+                continue;
+            }
+
+            var texture = textureProvider.GetFromGameIcon(new GameIconLookup(item.Icon)).GetWrapOrEmpty();
+            ImGui.Image(texture.Handle, texture.Size / 2.0f);
+            ImGui.SameLine();
+            ImGui.LabelText("", $"Item {c}: {item.Name} ({item.LevelItem.RowId})");
         }
     }
 

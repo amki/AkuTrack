@@ -42,6 +42,9 @@ public class MapWindow : Window, IDisposable
 {
     private readonly record struct ClickedPlayer(string Name, uint EntityId, Vector3 Position, bool IsFriend);
     private readonly record struct ClickedAetheryte(string Name, uint AetheryteId, byte SubIndex, uint GilCost);
+    private readonly record struct TreasureMapSpotInfo(uint RankId, ushort SpotIndex, string RankName, byte TextureId, Vector3 Position);
+    private readonly record struct LocalMapCategoryMarker(string Category, uint RowId, string Name, uint IconId, Vector3 Position, float Radius);
+    private readonly record struct ClickedMapElement(string Type, uint RowId, string Name, Vector3 Position);
 
     private readonly Plugin plugin;
     private readonly Configuration configuration;
@@ -78,11 +81,16 @@ public class MapWindow : Window, IDisposable
     private bool suppressFlagPlacement;
     private bool pendingFlagFocus;
     private (uint TerritoryId, uint MapId, float X, float Y)? lastFocusedFlag;
+    private uint treasureMapSpotCacheMap;
+    private List<TreasureMapSpotInfo> treasureMapSpotCache = new();
+    private uint localCategoryMarkerCacheMap;
+    private List<LocalMapCategoryMarker> localCategoryMarkerCache = new();
 
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
     private List<ClickedAetheryte> clickedAetherytes = new();
     private List<SightseeingLogEntryInfo> clickedSightseeingLogEntries = new();
+    private List<ClickedMapElement> clickedMapElements = new();
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly BottomBar bottomBar;
@@ -214,7 +222,7 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapElements() {
-        if (clickedObjects.Count > 0 || clickedPlayers.Count > 0 || clickedAetherytes.Count > 0 || clickedSightseeingLogEntries.Count > 0)
+        if (clickedObjects.Count > 0 || clickedPlayers.Count > 0 || clickedAetherytes.Count > 0 || clickedSightseeingLogEntries.Count > 0 || clickedMapElements.Count > 0)
         {
             DrawAkuObjectContextMenu();
             if(!ImGui.IsPopupOpen("AkuTrack_AkuObject_Context_Menu")) {
@@ -226,6 +234,8 @@ public class MapWindow : Window, IDisposable
                     clickedAetherytes.Clear();
                 if (clickedSightseeingLogEntries.Count > 0)
                     clickedSightseeingLogEntries.Clear();
+                if (clickedMapElements.Count > 0)
+                    clickedMapElements.Clear();
             }
         }
         DrawMapBackground();
@@ -294,6 +304,8 @@ public class MapWindow : Window, IDisposable
 
         DrawFateMarkers();
         DrawSightseeingLogMarkers();
+        DrawTreasureMapSpots();
+        DrawLocalCategoryMarkers();
         DrawPlacedMapMarkers();
         DrawFlagMarker();
 
@@ -444,10 +456,62 @@ public class MapWindow : Window, IDisposable
                 log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");
                 return;
             }
-            DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r, obj.tint);
+            var iconId = GetGatheringPointIconId(gatheringPointRow);
+            if (!configuration.IsIconCategoryEntryEnabled("GatheringPoint", iconId))
+                return;
+            DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "Treasure")
+        {
+            if (!configuration.DrawTreasure)
+                return;
             DrawIcon(60354, obj.pos, obj.r, obj.tint);
+        }
+        else if (obj.t == "Fishingspot")
+        {
+            if (!configuration.DrawFishingSpots)
+                return;
+            var iconId = GetFishingSpotIconId(obj.bid);
+            if (!configuration.IsIconCategoryEntryEnabled("Fishingspot", iconId))
+                return;
+            DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
+        }
+        else if (obj.t == "SpearfishingNotebook")
+        {
+            if (!configuration.DrawSpearfishingSpots)
+                return;
+            var iconId = GetSpearfishingSpotIconId(obj.bid);
+            if (!configuration.IsIconCategoryEntryEnabled("SpearfishingNotebook", iconId))
+                return;
+            DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
+        }
+        else if (obj.t == "Quest")
+        {
+            if (!configuration.DrawQuestMarkers)
+                return;
+            var iconId = GetDownloadedQuestMapIconId(obj.bid);
+            if (!configuration.IsIconCategoryEntryEnabled("Quest", iconId))
+                return;
+            DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
+        }
+        else if (obj.t == "HousingMapMarkerInfo")
+        {
+            if (!configuration.DrawHousingMapMarkers)
+                return;
+            DrawIcon(60441, obj.pos, obj.r, obj.tint);
+        }
+        else if (obj.t == "CEs")
+        {
+            if (!configuration.DrawCriticalEngagements)
+                return;
+            DrawIcon(60852, obj.pos, obj.r, obj.tint);
+        }
+        else if (obj.t == "FATE")
+        {
+            if (!configuration.DrawFates)
+                return;
+            DrawIcon(60501, obj.pos, obj.r, obj.tint);
+        }
         else
             DrawIcon(60515, obj.pos, obj.r, obj.tint);
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
@@ -455,6 +519,7 @@ public class MapWindow : Window, IDisposable
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
             clickedObjects.Add(obj);
             AddNearbyOtherPlayersToSelection();
+            AddNearbyMapElementsToSelection();
         }
         if (ImGui.IsItemHovered())
         {
@@ -476,16 +541,7 @@ public class MapWindow : Window, IDisposable
         {
             if (ImGui.MenuItem($"{obj.t} {obj.name}({obj.bid})"))
             {
-                string newName = $"akutrack_details_{obj.bid}";
-                foreach (var w in windowSystem.Windows)
-                {
-                    var wName = w.WindowName.Split("##")[1];
-                    if (wName == newName)
-                        return;
-                }
-                var dw = ActivatorUtilities.CreateInstance<DetailsWindow>(plugin.serviceProvider, new object[] { obj });
-                windowSystem.AddWindow(dw);
-                dw.Toggle();
+                OpenDetailsWindow(obj);
             }
         }
 
@@ -509,6 +565,31 @@ public class MapWindow : Window, IDisposable
                 OpenSightseeingLogEntryWindow(entry);
             }
         }
+
+        foreach (var element in clickedMapElements)
+        {
+            if (ImGui.MenuItem($"{GetLocalCategoryDisplayName(element.Type)} {element.Name}({element.RowId})"))
+            {
+                OpenDetailsWindow(CreateMapElementObject(element.Type, element.RowId, element.Name, element.Position));
+            }
+        }
+    }
+
+    private void OpenDetailsWindow(AkuGameObject obj)
+    {
+        var newName = $"akutrack_details_{obj.t}_{obj.bid}";
+        foreach (var window in windowSystem.Windows)
+        {
+            var splitName = window.WindowName.Split("##");
+            if (splitName.Length > 1 && splitName[1] == newName)
+            {
+                return;
+            }
+        }
+
+        var detailsWindow = ActivatorUtilities.CreateInstance<DetailsWindow>(plugin.serviceProvider, obj);
+        windowSystem.AddWindow(detailsWindow);
+        detailsWindow.Toggle();
     }
 
     private void OpenSightseeingLogEntryWindow(SightseeingLogEntryInfo entry)
@@ -573,6 +654,7 @@ public class MapWindow : Window, IDisposable
             ImGui.SetCursorPos(p);
             ImGui.Image(texture.Handle, texture.Size / 2.0f);
             ProcessAetheryteMapIconClick(placeNameSubtextId);
+            ProcessMapMarkerClick(placeNameSubtextId, text, position);
             if(configuration.DrawDebugSquares)
             {
                 ImGui.SetCursorPos(p);
@@ -772,8 +854,23 @@ public class MapWindow : Window, IDisposable
 
         if (clickedAetherytes.Count > 0)
         {
+            AddNearbyMapElementsToSelection();
+            AddNearbyOtherPlayersToSelection();
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
         }
+    }
+
+    private void ProcessMapMarkerClick(uint placeNameSubtextId, string text, Vector2 mapPosition)
+    {
+        if (!ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        {
+            return;
+        }
+
+        AddClickedMapElement("MapMarker", placeNameSubtextId, string.IsNullOrWhiteSpace(text) ? "Map marker" : text, GetWorldPositionForMapCoordinate(mapPosition));
+        AddNearbyMapElementsToSelection();
+        AddNearbyOtherPlayersToSelection();
+        ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
     }
 
     private static unsafe void TeleportToAetheryte(ClickedAetheryte aetheryte)
@@ -820,6 +917,8 @@ public class MapWindow : Window, IDisposable
         {
             clickedSightseeingLogEntries.Clear();
             clickedSightseeingLogEntries.Add(entry);
+            AddNearbyMapElementsToSelection();
+            AddNearbyOtherPlayersToSelection();
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
         }
     }
@@ -837,6 +936,413 @@ public class MapWindow : Window, IDisposable
             time,
             weather,
             emote);
+    }
+
+    private void DrawTreasureMapSpots()
+    {
+        if (!configuration.DrawTreasureMaps)
+        {
+            return;
+        }
+
+        foreach (var spot in GetTreasureMapSpotsForCurrentMap())
+        {
+            if (configuration.IsTreasureMapRankEnabled(spot.RankId))
+            {
+                DrawTreasureMapSpot(spot);
+            }
+        }
+    }
+
+    private IReadOnlyList<TreasureMapSpotInfo> GetTreasureMapSpotsForCurrentMap()
+    {
+        if (treasureMapSpotCacheMap == currentMap)
+        {
+            return treasureMapSpotCache;
+        }
+
+        treasureMapSpotCacheMap = currentMap;
+        treasureMapSpotCache = new List<TreasureMapSpotInfo>();
+
+        var spots = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.TreasureSpot>();
+        foreach (var rank in dataManager.GetExcelSheet<Lumina.Excel.Sheets.TreasureHuntRank>(clientState.ClientLanguage))
+        {
+            if (rank.RowId == 0 || rank.Icon == 0 || !rank.ItemName.IsValid || !spots.HasRow(rank.RowId))
+            {
+                continue;
+            }
+
+            var rankName = rank.ItemName.Value.Name.ToString();
+            if (string.IsNullOrWhiteSpace(rankName))
+            {
+                continue;
+            }
+
+            foreach (var spot in spots.GetRow(rank.RowId))
+            {
+                if (!spot.Location.IsValid)
+                {
+                    continue;
+                }
+
+                var level = spot.Location.Value;
+                if (level.Map.RowId != currentMap)
+                {
+                    continue;
+                }
+
+                treasureMapSpotCache.Add(new TreasureMapSpotInfo(rank.RowId, spot.SubrowId, rankName, rank.TreasureHuntTexture, new Vector3(level.X, level.Y, level.Z)));
+            }
+        }
+
+        return treasureMapSpotCache;
+    }
+
+    private void DrawTreasureMapSpot(TreasureMapSpotInfo spot)
+    {
+        var center = GetMapScreenPosition(spot.Position);
+        var drawList = ImGui.GetWindowDrawList();
+        var texture = textureProvider.GetFromGame(GetTreasureMapTexturePath(spot.TextureId)).GetWrapOrEmpty();
+
+        var size = new Vector2(220.0f, 200.0f) * Scale;
+        var min = center - size / 2.0f;
+        var max = center + size / 2.0f;
+
+        var baseUv0 = Vector2.Zero;
+        var baseUv1 = new Vector2(2.0f / 5.0f, 1.0f);
+        drawList.AddImage(texture.Handle, min, max, baseUv0, baseUv1);
+
+        var xSourceSize = texture.Size.Y / 6.0f;
+
+        var xCenter = new Vector2(
+            texture.Size.X * (14.0f / 15.0f) + xSourceSize * 0.12f,
+            texture.Size.Y * (3.0f / 5.0f) - xSourceSize * 0.18f
+        );
+
+        var xSourceMin = xCenter - new Vector2(xSourceSize / 2.0f, xSourceSize / 2.0f);
+        var xSourceMax = xCenter + new Vector2(xSourceSize / 2.0f, xSourceSize / 2.0f);
+
+        var xRenderSize = new Vector2(size.X * 0.22f, size.X * 0.22f);
+        var xMin = center - xRenderSize / 2.0f;
+        var xMax = center + xRenderSize / 2.0f;
+
+        drawList.AddImage(texture.Handle, xMin, xMax, xSourceMin / texture.Size, xSourceMax / texture.Size);
+
+        if (IsBoundedBy(ImGui.GetMousePos(), min, max))
+        {
+            ImGui.SetTooltip($"{spot.RankName}\nTreasure map spot: {spot.Position.X:F1}, {spot.Position.Z:F1}");
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+            {
+                AddClickedMapElement("TreasureMaps", spot.RankId, spot.RankName, spot.Position);
+                AddNearbyMapElementsToSelection();
+                AddNearbyOtherPlayersToSelection();
+                ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+            }
+        }
+    }
+
+    private static string GetTreasureMapTexturePath(byte textureId)
+    {
+        return textureId switch
+        {
+            1 => "ui/uld/treasuremap_relic_hr1.tex",
+            2 => "ui/uld/treasuremap_seasonal_hr1.tex",
+            4 => "ui/uld/treasuremap_undersea_hr1.tex",
+            _ => "ui/uld/treasuremap_hr1.tex",
+        };
+    }
+
+    private static (Vector2 Uv0, Vector2 Uv1) GetTreasureMapSpriteUv(ushort spotIndex, Vector2 textureSize)
+    {
+        const float spriteWidth = 220.0f;
+        const float spriteHeight = 200.0f;
+
+        // Full texture layout:
+        // left 2/5 = base treasure map image
+        // right 3/5 = X marker sprites
+        var baseWidth = textureSize.X * 2.0f / 5.0f;
+
+        const int markerColumns = 5;
+        const int markerRows = 2;
+        const int markerCount = markerColumns * markerRows;
+
+        var markerAreaX = baseWidth;
+        var markerAreaY = textureSize.Y * 3.0f / 5.0f;
+
+        var markerCellWidth = (textureSize.X - baseWidth) / markerColumns;
+        var markerCellHeight = (textureSize.Y - markerAreaY) / markerRows;
+
+        var spriteIndex = spotIndex % markerCount;
+        var column = spriteIndex % markerColumns;
+        var row = spriteIndex / markerColumns;
+
+        var markerMin = new Vector2(markerAreaX + column * markerCellWidth, markerAreaY + row * markerCellHeight);
+        var markerMax = markerMin + new Vector2(markerCellWidth, markerCellHeight);
+
+        return (markerMin / textureSize, markerMax / textureSize);
+    }
+
+    private void DrawLocalCategoryMarkers()
+    {
+        foreach (var marker in GetLocalCategoryMarkersForCurrentMap())
+        {
+            if (!ShouldDrawLocalCategoryMarker(marker))
+            {
+                continue;
+            }
+
+            DrawLocalCategoryMarker(marker);
+        }
+    }
+
+    private IReadOnlyList<LocalMapCategoryMarker> GetLocalCategoryMarkersForCurrentMap()
+    {
+        if (localCategoryMarkerCacheMap == currentMap)
+        {
+            return localCategoryMarkerCache;
+        }
+
+        localCategoryMarkerCacheMap = currentMap;
+        localCategoryMarkerCache = new List<LocalMapCategoryMarker>();
+
+        AddFishingSpotMarkers(localCategoryMarkerCache);
+        AddSpearfishingSpotMarkers(localCategoryMarkerCache);
+        AddQuestMarkers(localCategoryMarkerCache);
+        AddHousingMapMarkers(localCategoryMarkerCache);
+
+        return localCategoryMarkerCache;
+    }
+
+    private bool ShouldDrawLocalCategoryMarker(string category)
+    {
+        return category switch
+        {
+            "Fishingspot" => configuration.DrawFishingSpots,
+            "SpearfishingNotebook" => configuration.DrawSpearfishingSpots,
+            "Quest" => configuration.DrawQuestMarkers,
+            "HousingMapMarkerInfo" => configuration.DrawHousingMapMarkers,
+            _ => false,
+        };
+    }
+
+    private bool ShouldDrawLocalCategoryMarker(LocalMapCategoryMarker marker)
+    {
+        return ShouldDrawLocalCategoryMarker(marker.Category)
+               && configuration.IsIconCategoryEntryEnabled(marker.Category, marker.IconId);
+    }
+
+    private void AddFishingSpotMarkers(List<LocalMapCategoryMarker> markers)
+    {
+        foreach (var spot in dataManager.GetExcelSheet<Lumina.Excel.Sheets.FishingSpot>(clientState.ClientLanguage))
+        {
+            if (!spot.TerritoryType.IsValid || spot.TerritoryType.Value.Map.RowId != currentMap)
+            {
+                continue;
+            }
+
+            var name = spot.PlaceName.IsValid ? spot.PlaceName.Value.Name.ToString() : $"Fishing Spot #{spot.RowId}";
+            var position = GetWorldPositionForMapCoordinate(new Vector2(spot.X, spot.Z));
+            markers.Add(new LocalMapCategoryMarker("Fishingspot", spot.RowId, name, GetFishingSpotIconId(spot), position, spot.Radius / 6.0f));
+        }
+    }
+
+    private void AddSpearfishingSpotMarkers(List<LocalMapCategoryMarker> markers)
+    {
+        foreach (var spot in dataManager.GetExcelSheet<Lumina.Excel.Sheets.SpearfishingNotebook>(clientState.ClientLanguage))
+        {
+            if (!spot.TerritoryType.IsValid || spot.TerritoryType.Value.Map.RowId != currentMap)
+            {
+                continue;
+            }
+
+            var name = spot.PlaceName.IsValid ? spot.PlaceName.Value.Name.ToString() : $"Spearfishing Spot #{spot.RowId}";
+            var position = GetWorldPositionForMapCoordinate(new Vector2(spot.X, spot.Y));
+            markers.Add(new LocalMapCategoryMarker("SpearfishingNotebook", spot.RowId, name, GetSpearfishingSpotIconId(spot), position, spot.Radius / 3.0f));
+        }
+    }
+
+    private void AddQuestMarkers(List<LocalMapCategoryMarker> markers)
+    {
+        foreach (var quest in dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>(clientState.ClientLanguage))
+        {
+            if (!quest.IssuerLocation.IsValid)
+            {
+                continue;
+            }
+
+            var level = quest.IssuerLocation.Value;
+            if (level.Map.RowId != currentMap || level.X == 0 && level.Z == 0)
+            {
+                continue;
+            }
+
+            var name = quest.Name.ToString();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = $"Quest #{quest.RowId}";
+            }
+
+            var iconId = GetQuestMapIconId(quest);
+            markers.Add(new LocalMapCategoryMarker("Quest", quest.RowId, name, iconId, new Vector3(level.X, level.Y, level.Z), 0));
+        }
+    }
+
+    private static uint GetQuestMapIconId(Lumina.Excel.Sheets.Quest quest)
+    {
+        if (quest.EventIconType.IsValid)
+        {
+            var eventIconType = quest.EventIconType.Value;
+            var iconId = GetQuestMapIconIdForEventIconType(eventIconType.RowId);
+            if (iconId != 0)
+            {
+                return iconId;
+            }
+
+            if (eventIconType.MapIconAvailable != 0)
+            {
+                return eventIconType.MapIconAvailable;
+            }
+        }
+
+        return quest.Icon != 0 ? quest.Icon : 71221;
+    }
+
+    private static uint GetQuestMapIconIdForEventIconType(uint eventIconTypeId)
+    {
+        return eventIconTypeId switch
+        {
+            1 => 71221,
+            3 => 71201,
+            4 => 71222,
+            8 or 10 => 71341,
+            33 => 62521,
+            34 => 62523,
+            _ => 0,
+        };
+    }
+
+    private uint GetDownloadedQuestMapIconId(uint questId)
+    {
+        if (dataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>(clientState.ClientLanguage).TryGetRow(questId, out var quest))
+        {
+            return GetQuestMapIconId(quest);
+        }
+
+        return 71221;
+    }
+
+    private uint GetFishingSpotIconId(uint fishingSpotId)
+    {
+        if (dataManager.GetExcelSheet<Lumina.Excel.Sheets.FishingSpot>(clientState.ClientLanguage).TryGetRow(fishingSpotId, out var spot))
+        {
+            return GetFishingSpotIconId(spot);
+        }
+
+        return 60465;
+    }
+
+    private static uint GetFishingSpotIconId(Lumina.Excel.Sheets.FishingSpot spot)
+    {
+        return spot.Rare ? 60466u : 60465u;
+    }
+
+    private uint GetSpearfishingSpotIconId(uint spearfishingSpotId)
+    {
+        if (dataManager.GetExcelSheet<Lumina.Excel.Sheets.SpearfishingNotebook>(clientState.ClientLanguage).TryGetRow(spearfishingSpotId, out var spot))
+        {
+            return GetSpearfishingSpotIconId(spot);
+        }
+
+        return 60929;
+    }
+
+    private static uint GetSpearfishingSpotIconId(Lumina.Excel.Sheets.SpearfishingNotebook spot)
+    {
+        return spot.IsShadowNode ? 60930u : 60929u;
+    }
+
+    private static uint GetGatheringPointIconId(Lumina.Excel.Sheets.GatheringPoint gatheringPoint)
+    {
+        var gatheringType = gatheringPoint.GatheringPointBase.Value.GatheringType.Value;
+        return (uint)gatheringType.IconMain;
+    }
+
+    private void AddHousingMapMarkers(List<LocalMapCategoryMarker> markers)
+    {
+        foreach (var row in dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.HousingMapMarkerInfo>())
+        {
+            foreach (var marker in row)
+            {
+                if (!marker.Map.IsValid || marker.Map.RowId != currentMap || marker.X == 0 && marker.Z == 0)
+                {
+                    continue;
+                }
+
+                markers.Add(new LocalMapCategoryMarker("HousingMapMarkerInfo", marker.RowId, $"Housing Marker #{marker.RowId}.{marker.SubrowId}", 60441, new Vector3(marker.X, marker.Y, marker.Z), 0));
+            }
+        }
+    }
+
+    private void DrawLocalCategoryMarker(LocalMapCategoryMarker marker)
+    {
+        var center = GetMapScreenPosition(marker.Position);
+        var drawList = ImGui.GetWindowDrawList();
+        var radius = marker.Radius > 0 ? marker.Radius * Scale : 10.0f * ImGuiHelpers.GlobalScale;
+        var fillColor = GetLocalCategoryColor(marker.Category, 0.26f);
+        var outlineColor = GetLocalCategoryColor(marker.Category, 0.92f);
+
+        drawList.AddCircleFilled(center, radius, ImGui.GetColorU32(fillColor), 32);
+        drawList.AddCircle(center, radius, ImGui.GetColorU32(outlineColor), 32, MathF.Max(1.0f, ImGuiHelpers.GlobalScale));
+
+        if (marker.IconId != 0)
+        {
+            var texture = textureProvider.GetFromGameIcon((int)marker.IconId).GetWrapOrEmpty();
+            var size = new Vector2(22.0f * ImGuiHelpers.GlobalScale);
+            drawList.AddImage(texture.Handle, center - size / 2.0f, center + size / 2.0f);
+        }
+
+        if (Vector2.Distance(ImGui.GetMousePos(), center) <= MathF.Max(radius, 14.0f))
+        {
+            ImGui.SetTooltip($"{GetLocalCategoryDisplayName(marker.Category)}: {marker.Name}\n{marker.Position.X:F1}, {marker.Position.Z:F1}");
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+            {
+                AddClickedMapElement(marker.Category, marker.RowId, marker.Name, marker.Position);
+                AddNearbyMapElementsToSelection();
+                AddNearbyOtherPlayersToSelection();
+                ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+            }
+        }
+    }
+
+    private static Vector4 GetLocalCategoryColor(string category, float alpha)
+    {
+        return category switch
+        {
+            "Fishingspot" => new Vector4(0.20f, 0.55f, 1.00f, alpha),
+            "SpearfishingNotebook" => new Vector4(0.00f, 0.75f, 0.85f, alpha),
+            "Quest" => new Vector4(1.00f, 0.78f, 0.18f, alpha),
+            "HousingMapMarkerInfo" => new Vector4(0.95f, 0.48f, 0.20f, alpha),
+            _ => new Vector4(1.0f, 1.0f, 1.0f, alpha),
+        };
+    }
+
+    private static string GetLocalCategoryDisplayName(string category)
+    {
+        return category switch
+        {
+            "Fishingspot" => "Fishing spot",
+            "SpearfishingNotebook" => "Spearfishing spot",
+            "Quest" => "Quest",
+            "HousingMapMarkerInfo" => "Housing map marker",
+            "TreasureMaps" => "Treasure map",
+            "MapMarker" => "Map marker",
+            "PlacedMapMarker" => "Placed map marker",
+            "Flag" => "Flag",
+            "FieldMarker" => "Field marker",
+            "FATE" => "FATE",
+            "CEs" => "Critical engagement",
+            _ => category,
+        };
     }
 
     private void DrawOtherPlayerIcons()
@@ -861,6 +1367,7 @@ public class MapWindow : Window, IDisposable
                 {
                     ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
                     AddClickedPlayer(character, isFriend);
+                    AddNearbyMapElementsToSelection();
                 }
             }
         }
@@ -933,6 +1440,13 @@ public class MapWindow : Window, IDisposable
         if (Vector2.Distance(ImGui.GetMousePos(), center) <= MathF.Max(iconHoverRadius, MathF.Min(radius, 32.0f)))
         {
             ImGui.SetTooltip($"FATE: {fate.Name}\nLevel: {fate.Level}\nProgress: {fate.Progress}%\nTime: {FormatTimeRemaining(fate.TimeRemaining)}");
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+            {
+                AddClickedMapElement("FATE", fate.FateId, fate.Name.ToString(), fate.Position);
+                AddNearbyMapElementsToSelection();
+                AddNearbyOtherPlayersToSelection();
+                ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+            }
         }
     }
 
@@ -999,6 +1513,87 @@ public class MapWindow : Window, IDisposable
         clickedPlayers.Add(new ClickedPlayer(character.Name.ToString(), character.EntityId, character.Position, isFriend));
     }
 
+    private void AddNearbyMapElementsToSelection()
+    {
+        const float selectionRadius = 18.0f;
+        var mousePosition = ImGui.GetMousePos();
+
+        if (configuration.DrawTreasureMaps)
+        {
+            foreach (var spot in GetTreasureMapSpotsForCurrentMap())
+            {
+                if (!configuration.IsTreasureMapRankEnabled(spot.RankId))
+                {
+                    continue;
+                }
+
+                var center = GetMapScreenPosition(spot.Position);
+                var size = new Vector2(220.0f, 200.0f) * Scale;
+                if (IsBoundedBy(mousePosition, center - size / 2.0f, center + size / 2.0f))
+                {
+                    AddClickedMapElement("TreasureMaps", spot.RankId, spot.RankName, spot.Position);
+                }
+            }
+        }
+
+        foreach (var marker in GetLocalCategoryMarkersForCurrentMap())
+        {
+            if (!ShouldDrawLocalCategoryMarker(marker))
+            {
+                continue;
+            }
+
+            var center = GetMapScreenPosition(marker.Position);
+            var radius = marker.Radius > 0 ? marker.Radius * Scale : 10.0f * ImGuiHelpers.GlobalScale;
+            if (Vector2.Distance(mousePosition, center) <= MathF.Max(radius, selectionRadius))
+            {
+                AddClickedMapElement(marker.Category, marker.RowId, marker.Name, marker.Position);
+            }
+        }
+
+        if (configuration.DrawFates)
+        {
+            foreach (var fate in fateTable)
+            {
+                if (fate is null || !fateTable.IsValid(fate) || fate.TerritoryType.RowId != currentTerritory || fate.State is not (FateState.Preparing or FateState.Running))
+                {
+                    continue;
+                }
+
+                var center = GetMapScreenPosition(fate.Position);
+                var radius = fate.Radius * GetMapScaleFactor() * Scale;
+                if (Vector2.Distance(mousePosition, center) <= MathF.Max(selectionRadius, MathF.Min(radius, 32.0f)))
+                {
+                    AddClickedMapElement("FATE", fate.FateId, fate.Name.ToString(), fate.Position);
+                }
+            }
+        }
+    }
+
+    private void AddClickedMapElement(string type, uint rowId, string name, Vector3 position)
+    {
+        var element = new ClickedMapElement(type, rowId, name, position);
+        if (!clickedMapElements.Contains(element))
+        {
+            clickedMapElements.Add(element);
+        }
+    }
+
+    private AkuGameObject CreateMapElementObject(string type, uint rowId, string name, Vector3 position)
+    {
+        return new AkuGameObject
+        {
+            created_at = DateTimeOffset.Now,
+            t = type,
+            name = name,
+            mid = currentMap,
+            zid = currentTerritory,
+            pos = position,
+            bid = rowId,
+            tint = Vector4.One,
+        };
+    }
+
     private static bool IsFriend(ICharacter character)
     {
         return character.StatusFlags.HasFlag(StatusFlags.Friend);
@@ -1063,6 +1658,14 @@ public class MapWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip($"Flag: {flag.XFloat:F1}, {flag.YFloat:F1}");
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+            {
+                AddClickedMapElement("Flag", currentMap, "Flag", position);
+                AddNearbyMapElementsToSelection();
+                AddNearbyOtherPlayersToSelection();
+                ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+            }
+
             if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
             {
                 agentMap->FlagMarkerCount = 0;
@@ -1139,6 +1742,14 @@ public class MapWindow : Window, IDisposable
         {
             ImGui.SetTooltip(tooltip);
         }
+
+        if (ImGui.IsItemHovered() && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+        {
+            AddClickedMapElement("PlacedMapMarker", (uint)iconId, string.IsNullOrWhiteSpace(tooltip) ? "Placed map marker" : tooltip, GetWorldPositionForMapCoordinate(mapPosition));
+            AddNearbyMapElementsToSelection();
+            AddNearbyOtherPlayersToSelection();
+            ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+        }
     }
 
     private unsafe void DrawFieldMarkers()
@@ -1179,6 +1790,13 @@ public class MapWindow : Window, IDisposable
         if (Vector2.Distance(ImGui.GetMousePos(), center) <= size.X / 2.0f)
         {
             ImGui.SetTooltip($"Field Marker {label}: {position.X:F1}, {position.Z:F1}");
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+            {
+                AddClickedMapElement("FieldMarker", (uint)markerIndex, $"Field Marker {label}", position);
+                AddNearbyMapElementsToSelection();
+                AddNearbyOtherPlayersToSelection();
+                ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+            }
         }
     }
 
