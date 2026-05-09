@@ -99,6 +99,13 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var drawSightseeingLogEntries = configuration.DrawSightseeingLogEntries;
+        if (ImGui.Checkbox("Draw sightseeing log entries?", ref drawSightseeingLogEntries))
+        {
+            configuration.DrawSightseeingLogEntries = drawSightseeingLogEntries;
+            configuration.Save();
+        }
+
         var drawPartyMembers = configuration.DrawPartyMembers;
         if (ImGui.Checkbox("Draw party members?", ref drawPartyMembers))
         {

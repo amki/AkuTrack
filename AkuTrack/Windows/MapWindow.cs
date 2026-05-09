@@ -42,6 +42,7 @@ public class MapWindow : Window, IDisposable
 {
     private readonly record struct ClickedPlayer(string Name, uint EntityId, Vector3 Position, bool IsFriend);
     private readonly record struct ClickedAetheryte(string Name, uint AetheryteId, byte SubIndex, uint GilCost);
+    private readonly record struct ClickedSightseeingLogEntry(uint RowId, string Name, string Description, string Time, string Weather, string Emote);
 
     private readonly Plugin plugin;
     private readonly Configuration configuration;
@@ -82,6 +83,7 @@ public class MapWindow : Window, IDisposable
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
     private List<ClickedAetheryte> clickedAetherytes = new();
+    private List<ClickedSightseeingLogEntry> clickedSightseeingLogEntries = new();
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly BottomBar bottomBar;
@@ -213,7 +215,7 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapElements() {
-        if (clickedObjects.Count > 0 || clickedPlayers.Count > 0 || clickedAetherytes.Count > 0)
+        if (clickedObjects.Count > 0 || clickedPlayers.Count > 0 || clickedAetherytes.Count > 0 || clickedSightseeingLogEntries.Count > 0)
         {
             DrawAkuObjectContextMenu();
             if(!ImGui.IsPopupOpen("AkuTrack_AkuObject_Context_Menu")) {
@@ -223,6 +225,8 @@ public class MapWindow : Window, IDisposable
                     clickedPlayers.Clear();
                 if (clickedAetherytes.Count > 0)
                     clickedAetherytes.Clear();
+                if (clickedSightseeingLogEntries.Count > 0)
+                    clickedSightseeingLogEntries.Clear();
             }
         }
         DrawMapBackground();
@@ -276,6 +280,7 @@ public class MapWindow : Window, IDisposable
         }
 
         DrawFateMarkers();
+        DrawSightseeingLogMarkers();
         DrawPlacedMapMarkers();
         DrawFlagMarker();
 
@@ -482,6 +487,38 @@ public class MapWindow : Window, IDisposable
             {
                 TeleportToAetheryte(aetheryte);
             }
+        }
+
+        foreach (var entry in clickedSightseeingLogEntries)
+        {
+            if (ImGui.BeginMenu($"Vista #{entry.RowId}: {entry.Name}"))
+            {
+                DrawSightseeingLogEntryDetails(entry);
+                ImGui.EndMenu();
+            }
+        }
+    }
+
+    private static void DrawSightseeingLogEntryDetails(ClickedSightseeingLogEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Description))
+        {
+            ImGui.TextWrapped(entry.Description);
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.Emote))
+        {
+            ImGui.TextUnformatted($"Emote: {entry.Emote}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.Time))
+        {
+            ImGui.TextUnformatted($"Time: {entry.Time}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.Weather))
+        {
+            ImGui.TextUnformatted($"Weather: {entry.Weather}");
         }
     }
 
@@ -724,6 +761,64 @@ public class MapWindow : Window, IDisposable
     private static unsafe void TeleportToAetheryte(ClickedAetheryte aetheryte)
     {
         Telepo.Instance()->Teleport(aetheryte.AetheryteId, aetheryte.SubIndex);
+    }
+
+    private void DrawSightseeingLogMarkers()
+    {
+        if (!configuration.DrawSightseeingLogEntries)
+        {
+            return;
+        }
+
+        foreach (var entry in dataManager.GetExcelSheet<Lumina.Excel.Sheets.Adventure>(clientState.ClientLanguage))
+        {
+            var level = entry.Level.Value;
+            if (level.Map.RowId != currentMap)
+            {
+                continue;
+            }
+
+            var position = new Vector3(level.X, 0, level.Z);
+            DrawSightseeingLogMarker(BuildSightseeingLogEntry(entry), position);
+        }
+    }
+
+    private void DrawSightseeingLogMarker(ClickedSightseeingLogEntry entry, Vector3 position)
+    {
+        var texture = textureProvider.GetFromGameIcon(60071).GetWrapOrEmpty();
+        var center = GetMapScreenPosition(position);
+        var size = texture.Size / 2.0f;
+        var min = center - size / 2.0f;
+
+        ImGui.SetCursorPos(min - currentMapScreenPosition);
+        ImGui.Image(texture.Handle, size);
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip($"Vista #{entry.RowId}: {entry.Name}");
+        }
+
+        if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        {
+            clickedSightseeingLogEntries.Clear();
+            clickedSightseeingLogEntries.Add(entry);
+            ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+        }
+    }
+
+    private static ClickedSightseeingLogEntry BuildSightseeingLogEntry(Lumina.Excel.Sheets.Adventure entry)
+    {
+        var time = string.Empty;
+        var weather = string.Empty;
+        var emote = entry.Emote.Value.Name.ToString();
+
+        return new ClickedSightseeingLogEntry(
+            entry.RowId,
+            entry.Name.ToString(),
+            entry.Description.ToString(),
+            time,
+            weather,
+            emote);
     }
 
     private void DrawOtherPlayerIcons()
