@@ -420,16 +420,13 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "EventObj")
         {
-            if (!configuration.DrawEObj)
+            var iconId = GetEventObjIconId(obj.bid);
+            if (!configuration.IsIconCategoryEntryEnabled("EventObj", iconId))
                 return;
-            if (obj.bid == 2000401) // summoning bell
-                DrawIcon(60425, obj.pos, obj.r, obj.tint);
-            else if (obj.bid == 2000402) // market board
-                DrawIcon(60570, obj.pos, obj.r, obj.tint);
-            else if (obj.bid == 2000470) // company chest
-                DrawIcon(60460, obj.pos, obj.r, obj.tint);
+            if (iconId == 60033)
+                DrawIcon((int)iconId, obj.pos, obj.r, obj.tint, new Vector2(22.0f * ImGuiHelpers.GlobalScale));
             else
-                DrawIcon(60353, obj.pos, obj.r, obj.tint);
+                DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "BattleNpc")
         {
@@ -604,18 +601,24 @@ public class MapWindow : Window, IDisposable
     private void DrawIcon(int iconid, Vector3 position, float rotation, Vector4 tint)
     {
         var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
+        DrawIcon(iconid, position, rotation, tint, texture.Size / 2.0f);
+    }
 
-        var p = ((GetMapCoordinateFor3D(position)) * Scale) + DrawPosition - (texture.Size / 4.0f);
+    private void DrawIcon(int iconid, Vector3 position, float rotation, Vector4 tint, Vector2 size)
+    {
+        var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
+
+        var p = ((GetMapCoordinateFor3D(position)) * Scale) + DrawPosition - (size / 2.0f);
 
         if (configuration.DrawDebugSquares)
         {
             ImGui.SetCursorPos(p);
             var cursorPos = ImGui.GetCursorScreenPos();
-            ImGui.GetWindowDrawList().AddRect(cursorPos, cursorPos + (texture.Size / 2.0f), ImGui.GetColorU32(configuration.TextColor), 3.0f);
+            ImGui.GetWindowDrawList().AddRect(cursorPos, cursorPos + size, ImGui.GetColorU32(configuration.TextColor), 3.0f);
         }
         ImGui.SetCursorPos(p);
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
-        ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, tint);
+        ImGui.Image(texture.Handle, size, Vector2.Zero, Vector2.One, tint);
     }
 
     private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation, uint placeNameSubtextId = 0)
@@ -1213,6 +1216,32 @@ public class MapWindow : Window, IDisposable
         }
 
         return 71221;
+    }
+
+    private uint GetEventObjIconId(uint eObjId)
+    {
+        if (eObjId == 2000401) // summoning bell
+        {
+            return 60425;
+        }
+
+        if (eObjId == 2000402) // market board
+        {
+            return 60570;
+        }
+
+        if (eObjId == 2000470) // company chest
+        {
+            return 60460;
+        }
+
+        if (dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).TryGetRow(eObjId, out var eObjName)
+            && string.Equals(eObjName.Singular.ToString(), "Windätherquelle", StringComparison.OrdinalIgnoreCase))
+        {
+            return 60033;
+        }
+
+        return 60353;
     }
 
     private uint GetFishingSpotIconId(uint fishingSpotId)

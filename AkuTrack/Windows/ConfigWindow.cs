@@ -93,7 +93,7 @@ public class ConfigWindow : Window, IDisposable
             DrawCheckbox("Show battle NPCs", configuration.DrawBNpc, value => configuration.DrawBNpc = value);
             DrawCheckbox("Show critical engagements", configuration.DrawCriticalEngagements, value => configuration.DrawCriticalEngagements = value);
             DrawCheckbox("Show event NPCs", configuration.DrawENpc, value => configuration.DrawENpc = value);
-            DrawCheckbox("Show event objects", configuration.DrawEObj, value => configuration.DrawEObj = value);
+            DrawIconCategorySettings("EventObj", "Show event objects", GetEventObjIconOptions());
             DrawCheckbox("Show FATEs", configuration.DrawFates, value => configuration.DrawFates = value);
             DrawIconCategorySettings("Fishingspot", "Show fishing spots", GetFishingSpotIconOptions());
             DrawIconCategorySettings("GatheringPoint", "Show gathering points", GetGatheringPointIconOptions());
@@ -259,6 +259,15 @@ public class ConfigWindow : Window, IDisposable
             .DistinctBy(option => option.IconId);
     }
 
+    private IEnumerable<IconCategoryOption> GetEventObjIconOptions()
+    {
+        yield return new IconCategoryOption(60353, "Event object");
+        yield return new IconCategoryOption(60033, "Windätherquelle");
+        yield return new IconCategoryOption(60425, "Summoning bell");
+        yield return new IconCategoryOption(60460, "Company chest");
+        yield return new IconCategoryOption(60570, "Market board");
+    }
+
     private IEnumerable<IconCategoryOption> GetSpearfishingSpotIconOptions()
     {
         return dataManager.GetExcelSheet<Lumina.Excel.Sheets.SpearfishingNotebook>()
@@ -320,6 +329,7 @@ public class ConfigWindow : Window, IDisposable
         return category switch
         {
             "GatheringPoint" => "Gathering point",
+            "EventObj" => "Event object",
             "Fishingspot" => "Fishing spot",
             "SpearfishingNotebook" => "Spearfishing",
             "Quest" => "Quest marker",

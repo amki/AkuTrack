@@ -82,7 +82,7 @@ public class Configuration : IPluginConfiguration
 
     private static bool GetDefaultIconCategoryEntryEnabled(string category)
     {
-        return category is "GatheringPoint";
+        return category is "GatheringPoint" or "EventObj";
     }
 
     // The below exists just to make saving less cumbersome
