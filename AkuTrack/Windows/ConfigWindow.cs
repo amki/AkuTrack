@@ -56,49 +56,6 @@ public class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
-        DrawSection("Map behavior", configuration.ConfigMapBehaviorOpen, value => configuration.ConfigMapBehaviorOpen = value, () =>
-        {
-            DrawCheckbox("Sync with game map (M)", configuration.ToggleMapWithGameMap, value => configuration.ToggleMapWithGameMap = value);
-            DrawCheckbox("Center on player when opening", configuration.CenterOnPlayerWhenOpening, value => configuration.CenterOnPlayerWhenOpening = value);
-            DrawCheckbox("Keep player centered until manual pan", configuration.KeepPlayerCentered, value => configuration.KeepPlayerCentered = value);
-        });
-
-        DrawSection("Players", configuration.ConfigPlayersOpen, value => configuration.ConfigPlayersOpen = value, () =>
-        {
-            DrawCheckbox("Show party members", configuration.DrawPartyMembers, value => configuration.DrawPartyMembers = value);
-            DrawCheckbox("Show other players", configuration.DrawOtherPlayers, value => configuration.DrawOtherPlayers = value);
-            DrawCheckbox("Color player markers by class", configuration.ColorPlayerMarkersByClass, value => configuration.ColorPlayerMarkersByClass = value);
-            DrawCheckbox("Show camera cone", configuration.DrawCameraCone, value => configuration.DrawCameraCone = value);
-        });
-
-        DrawSection("World content", configuration.ConfigWorldContentOpen, value => configuration.ConfigWorldContentOpen = value, () =>
-        {
-            DrawCheckbox("Show remote markers", configuration.DrawRemoteMarker, value => configuration.DrawRemoteMarker = value);
-            DrawCheckbox("Show battle NPCs", configuration.DrawBNpc, value => configuration.DrawBNpc = value);
-            DrawCheckbox("Show event NPCs", configuration.DrawENpc, value => configuration.DrawENpc = value);
-            DrawCheckbox("Show event objects", configuration.DrawEObj, value => configuration.DrawEObj = value);
-            DrawCheckbox("Show gathering points", configuration.DrawGatheringPoint, value => configuration.DrawGatheringPoint = value);
-            DrawIconCategorySettings("GatheringPoint", GetGatheringPointIconOptions());
-            DrawCheckbox("Show treasure", configuration.DrawTreasure, value => configuration.DrawTreasure = value);
-            DrawTreasureMapSettings();
-            DrawCheckbox("Show fishing spots", configuration.DrawFishingSpots, value => configuration.DrawFishingSpots = value);
-            DrawIconCategorySettings("Fishingspot", GetFishingSpotIconOptions());
-            DrawCheckbox("Show spearfishing spots", configuration.DrawSpearfishingSpots, value => configuration.DrawSpearfishingSpots = value);
-            DrawIconCategorySettings("SpearfishingNotebook", GetSpearfishingSpotIconOptions());
-            DrawCheckbox("Show quest markers", configuration.DrawQuestMarkers, value => configuration.DrawQuestMarkers = value);
-            DrawIconCategorySettings("Quest", GetQuestIconOptions());
-            DrawCheckbox("Show housing map markers", configuration.DrawHousingMapMarkers, value => configuration.DrawHousingMapMarkers = value);
-            DrawCheckbox("Show FATEs", configuration.DrawFates, value => configuration.DrawFates = value);
-            DrawCheckbox("Show critical engagements", configuration.DrawCriticalEngagements, value => configuration.DrawCriticalEngagements = value);
-            DrawCheckbox("Show sightseeing log entries", configuration.DrawSightseeingLogEntries, value => configuration.DrawSightseeingLogEntries = value);
-        });
-
-        DrawSection("Map markers", configuration.ConfigMapMarkersOpen, value => configuration.ConfigMapMarkersOpen = value, () =>
-        {
-            DrawCheckbox("Show icon markers with labels", configuration.DrawMapMarkersWithIcons, value => configuration.DrawMapMarkersWithIcons = value);
-            DrawCheckbox("Show label-only markers", configuration.DrawMapMarkerLabelsOnly, value => configuration.DrawMapMarkerLabelsOnly = value);
-        });
-
         DrawSection("Appearance and debug", configuration.ConfigAppearanceDebugOpen, value => configuration.ConfigAppearanceDebugOpen = value, () =>
         {
             DrawCheckbox("Draw debug squares", configuration.DrawDebugSquares, value => configuration.DrawDebugSquares = value);
@@ -114,6 +71,41 @@ public class ConfigWindow : Window, IDisposable
                 configuration.TextColor = textColor;
                 configuration.Save();
             }
+        });
+
+        DrawSection("Map behavior", configuration.ConfigMapBehaviorOpen, value => configuration.ConfigMapBehaviorOpen = value, () =>
+        {
+            DrawCheckbox("Center on player when opening", configuration.CenterOnPlayerWhenOpening, value => configuration.CenterOnPlayerWhenOpening = value);
+            DrawCheckbox("Keep player centered until manual pan", configuration.KeepPlayerCentered, value => configuration.KeepPlayerCentered = value);
+            DrawCheckbox("Sync with game map (M)", configuration.ToggleMapWithGameMap, value => configuration.ToggleMapWithGameMap = value);
+        });
+
+        DrawSection("Players", configuration.ConfigPlayersOpen, value => configuration.ConfigPlayersOpen = value, () =>
+        {
+            DrawCheckbox("Color player markers by class", configuration.ColorPlayerMarkersByClass, value => configuration.ColorPlayerMarkersByClass = value);
+            DrawCheckbox("Show camera cone", configuration.DrawCameraCone, value => configuration.DrawCameraCone = value);
+            DrawCheckbox("Show other players", configuration.DrawOtherPlayers, value => configuration.DrawOtherPlayers = value);
+            DrawCheckbox("Show party members", configuration.DrawPartyMembers, value => configuration.DrawPartyMembers = value);
+        });
+
+        DrawSection("World content", configuration.ConfigWorldContentOpen, value => configuration.ConfigWorldContentOpen = value, () =>
+        {
+            DrawCheckbox("Show battle NPCs", configuration.DrawBNpc, value => configuration.DrawBNpc = value);
+            DrawCheckbox("Show critical engagements", configuration.DrawCriticalEngagements, value => configuration.DrawCriticalEngagements = value);
+            DrawCheckbox("Show event NPCs", configuration.DrawENpc, value => configuration.DrawENpc = value);
+            DrawCheckbox("Show event objects", configuration.DrawEObj, value => configuration.DrawEObj = value);
+            DrawCheckbox("Show FATEs", configuration.DrawFates, value => configuration.DrawFates = value);
+            DrawIconCategorySettings("Fishingspot", "Show fishing spots", GetFishingSpotIconOptions());
+            DrawIconCategorySettings("GatheringPoint", "Show gathering points", GetGatheringPointIconOptions());
+            DrawCheckbox("Show housing map markers", configuration.DrawHousingMapMarkers, value => configuration.DrawHousingMapMarkers = value);
+            DrawCheckbox("Show map markers with icons and labels", configuration.DrawMapMarkersWithIcons, value => configuration.DrawMapMarkersWithIcons = value);
+            DrawCheckbox("Show map markers with labels only", configuration.DrawMapMarkerLabelsOnly, value => configuration.DrawMapMarkerLabelsOnly = value);
+            DrawIconCategorySettings("Quest", "Show quest markers", GetQuestIconOptions());
+            DrawCheckbox("Show remote markers", configuration.DrawRemoteMarker, value => configuration.DrawRemoteMarker = value);
+            DrawCheckbox("Show sightseeing log entries", configuration.DrawSightseeingLogEntries, value => configuration.DrawSightseeingLogEntries = value);
+            DrawIconCategorySettings("SpearfishingNotebook", "Show spearfishing spots", GetSpearfishingSpotIconOptions());
+            DrawCheckbox("Show treasure", configuration.DrawTreasure, value => configuration.DrawTreasure = value);
+            DrawTreasureMapSettings();
         });
     }
 
@@ -137,18 +129,65 @@ public class ConfigWindow : Window, IDisposable
 
     private void DrawTreasureMapSettings()
     {
-        DrawCheckbox("Show treasure map spots", configuration.DrawTreasureMaps, value => configuration.DrawTreasureMaps = value);
-        if (!configuration.DrawTreasureMaps)
+        var ranks = GetTreasureMapRanks().OrderBy(rank => rank.Name).ToList();
+        if (ranks.Count <= 0)
+        {
+            ImGui.TextDisabled("Show treasure map spots");
+            return;
+        }
+
+        var open = configuration.IsIconCategoryOpen("TreasureMaps");
+        ImGui.SetNextItemOpen(open, ImGuiCond.Once);
+        var nextOpen = ImGui.TreeNode("Show treasure map spots##TreasureMaps_types");
+        if (nextOpen != open)
+        {
+            configuration.SetIconCategoryOpen("TreasureMaps", nextOpen);
+            configuration.Save();
+        }
+
+        if (!nextOpen)
         {
             return;
         }
 
         ImGui.Indent();
-        foreach (var rank in GetTreasureMapRanks())
+        var allChecked = ranks.All(rank => configuration.IsTreasureMapRankEnabled(rank.Id));
+        if (ImGui.Checkbox("All##TreasureMaps_all", ref allChecked))
         {
-            DrawCheckbox(rank.Name, configuration.IsTreasureMapRankEnabled(rank.Id), value => configuration.SetTreasureMapRankEnabled(rank.Id, value));
+            foreach (var rank in ranks)
+            {
+                configuration.SetTreasureMapRankEnabled(rank.Id, allChecked);
+            }
+            configuration.Save();
         }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Check all##TreasureMaps_check_all"))
+        {
+            foreach (var rank in ranks)
+            {
+                configuration.SetTreasureMapRankEnabled(rank.Id, true);
+            }
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Uncheck all##TreasureMaps_uncheck_all"))
+        {
+            foreach (var rank in ranks)
+            {
+                configuration.SetTreasureMapRankEnabled(rank.Id, false);
+            }
+            configuration.Save();
+        }
+
+        foreach (var rank in ranks)
+        {
+            DrawCheckbox($"{rank.Name}##TreasureMaps_{rank.Id}", configuration.IsTreasureMapRankEnabled(rank.Id), value => configuration.SetTreasureMapRankEnabled(rank.Id, value));
+        }
+
         ImGui.Unindent();
+        ImGui.TreePop();
     }
 
     private IEnumerable<TreasureMapRankConfigInfo> GetTreasureMapRanks()
@@ -171,17 +210,21 @@ public class ConfigWindow : Window, IDisposable
         }
     }
 
-    private void DrawIconCategorySettings(string category, IEnumerable<IconCategoryOption> optionsSource)
+    private void DrawIconCategorySettings(string category, string label, IEnumerable<IconCategoryOption> optionsSource)
     {
         var options = optionsSource.OrderBy(option => option.IconId).ThenBy(option => option.Label).ToList();
         if (options.Count <= 1)
         {
+            foreach (var option in options)
+            {
+                DrawCheckbox(label, configuration.IsIconCategoryEntryEnabled(category, option.IconId), value => configuration.SetIconCategoryEntryEnabled(category, option.IconId, value));
+            }
             return;
         }
 
         var open = configuration.IsIconCategoryOpen(category);
         ImGui.SetNextItemOpen(open, ImGuiCond.Once);
-        var nextOpen = ImGui.TreeNode($"{GetIconCategoryLabel(category)} icon types##{category}_icon_types");
+        var nextOpen = ImGui.TreeNode($"{label}##{category}_icon_types");
         if (nextOpen != open)
         {
             configuration.SetIconCategoryOpen(category, nextOpen);

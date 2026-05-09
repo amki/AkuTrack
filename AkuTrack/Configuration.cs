@@ -58,7 +58,9 @@ public class Configuration : IPluginConfiguration
 
     public bool IsIconCategoryEntryEnabled(string category, uint iconId)
     {
-        return !IconCategoryToggles.TryGetValue(GetIconCategoryKey(category, iconId), out var enabled) || enabled;
+        return IconCategoryToggles.TryGetValue(GetIconCategoryKey(category, iconId), out var enabled)
+            ? enabled
+            : GetDefaultIconCategoryEntryEnabled(category);
     }
 
     public void SetIconCategoryEntryEnabled(string category, uint iconId, bool enabled)
@@ -77,6 +79,11 @@ public class Configuration : IPluginConfiguration
     }
 
     private static string GetIconCategoryKey(string category, uint iconId) => $"{category}:{iconId}";
+
+    private static bool GetDefaultIconCategoryEntryEnabled(string category)
+    {
+        return category is "GatheringPoint";
+    }
 
     // The below exists just to make saving less cumbersome
     public void Save()

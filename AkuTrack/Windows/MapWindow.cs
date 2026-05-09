@@ -204,8 +204,8 @@ public class MapWindow : Window, IDisposable
         using (var renderChild = ImRaii.Child("render_child", ImGui.GetContentRegionAvail(), false, ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoScrollbar))
         {
             currentMapScreenPosition = ImGui.GetWindowPos();
-            DrawMapElements();
             currentMapPixelSize = ImGui.GetWindowSize();
+            DrawMapElements();
 
             // Reset Draw Position for Overlay Extras
             ImGui.SetCursorPos(Vector2.Zero);
@@ -239,7 +239,7 @@ public class MapWindow : Window, IDisposable
             }
         }
         DrawMapBackground();
-        if (ImGui.IsItemHovered())
+        if (ImGui.IsItemHovered() && IsMouseInsideMapCanvas())
         {
             HoveredFlags |= HoverFlags.MapTexture;
         }
@@ -449,8 +449,6 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "GatheringPoint")
         {
-            if (!configuration.DrawGatheringPoint)
-                return;
             if (!dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().TryGetRow(obj.bid, out var gatheringPointRow))
             {
                 log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");
@@ -469,8 +467,6 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "Fishingspot")
         {
-            if (!configuration.DrawFishingSpots)
-                return;
             var iconId = GetFishingSpotIconId(obj.bid);
             if (!configuration.IsIconCategoryEntryEnabled("Fishingspot", iconId))
                 return;
@@ -478,8 +474,6 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "SpearfishingNotebook")
         {
-            if (!configuration.DrawSpearfishingSpots)
-                return;
             var iconId = GetSpearfishingSpotIconId(obj.bid);
             if (!configuration.IsIconCategoryEntryEnabled("SpearfishingNotebook", iconId))
                 return;
@@ -487,8 +481,6 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "Quest")
         {
-            if (!configuration.DrawQuestMarkers)
-                return;
             var iconId = GetDownloadedQuestMapIconId(obj.bid);
             if (!configuration.IsIconCategoryEntryEnabled("Quest", iconId))
                 return;
@@ -514,14 +506,14 @@ public class MapWindow : Window, IDisposable
         }
         else
             DrawIcon(60515, obj.pos, obj.r, obj.tint);
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        if (IsMouseInsideMapCanvas() && ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
             clickedObjects.Add(obj);
             AddNearbyOtherPlayersToSelection();
             AddNearbyMapElementsToSelection();
         }
-        if (ImGui.IsItemHovered())
+        if (ImGui.IsItemHovered() && IsMouseInsideMapCanvas())
         {
             DrawTooltip(obj);
             DrawIcon(60429, obj.pos, 3.14f, obj.tint);
@@ -738,7 +730,7 @@ public class MapWindow : Window, IDisposable
 
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
         ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3], Vector2.Zero, new Vector2(1, 0), Vector2.One, new Vector2(0, 1), ImGui.GetColorU32(tint));
-        return IsBoundedBy(ImGui.GetMousePos(), p - size / 2.0f, p + size / 2.0f);
+        return IsMouseInsideMapCanvas() && IsBoundedBy(ImGui.GetMousePos(), p - size / 2.0f, p + size / 2.0f);
     }
 
     private unsafe void DrawCameraCone(Vector3 pos)
@@ -826,7 +818,7 @@ public class MapWindow : Window, IDisposable
 
     private void ProcessAetheryteMapIconClick(uint placeNameSubtextId)
     {
-        if (placeNameSubtextId == 0 || !ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        if (placeNameSubtextId == 0 || !IsMouseInsideMapCanvas() || !ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             return;
         }
@@ -862,7 +854,7 @@ public class MapWindow : Window, IDisposable
 
     private void ProcessMapMarkerClick(uint placeNameSubtextId, string text, Vector2 mapPosition)
     {
-        if (!ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        if (!IsMouseInsideMapCanvas() || !ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             return;
         }
@@ -908,12 +900,12 @@ public class MapWindow : Window, IDisposable
         ImGui.SetCursorPos(min - currentMapScreenPosition);
         ImGui.Image(texture.Handle, size);
 
-        if (ImGui.IsItemHovered())
+        if (ImGui.IsItemHovered() && IsMouseInsideMapCanvas())
         {
             ImGui.SetTooltip($"Vista #{entry.RowId}: {entry.Name}");
         }
 
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        if (IsMouseInsideMapCanvas() && ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             clickedSightseeingLogEntries.Clear();
             clickedSightseeingLogEntries.Add(entry);
@@ -940,11 +932,6 @@ public class MapWindow : Window, IDisposable
 
     private void DrawTreasureMapSpots()
     {
-        if (!configuration.DrawTreasureMaps)
-        {
-            return;
-        }
-
         foreach (var spot in GetTreasureMapSpotsForCurrentMap())
         {
             if (configuration.IsTreasureMapRankEnabled(spot.RankId))
@@ -1028,7 +1015,7 @@ public class MapWindow : Window, IDisposable
 
         drawList.AddImage(texture.Handle, xMin, xMax, xSourceMin / texture.Size, xSourceMax / texture.Size);
 
-        if (IsBoundedBy(ImGui.GetMousePos(), min, max))
+        if (IsMouseInsideMapCanvas() && IsBoundedBy(ImGui.GetMousePos(), min, max))
         {
             ImGui.SetTooltip($"{spot.RankName}\nTreasure map spot: {spot.Position.X:F1}, {spot.Position.Z:F1}");
             if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
@@ -1054,9 +1041,6 @@ public class MapWindow : Window, IDisposable
 
     private static (Vector2 Uv0, Vector2 Uv1) GetTreasureMapSpriteUv(ushort spotIndex, Vector2 textureSize)
     {
-        const float spriteWidth = 220.0f;
-        const float spriteHeight = 200.0f;
-
         // Full texture layout:
         // left 2/5 = base treasure map image
         // right 3/5 = X marker sprites
@@ -1117,9 +1101,9 @@ public class MapWindow : Window, IDisposable
     {
         return category switch
         {
-            "Fishingspot" => configuration.DrawFishingSpots,
-            "SpearfishingNotebook" => configuration.DrawSpearfishingSpots,
-            "Quest" => configuration.DrawQuestMarkers,
+            "Fishingspot" => true,
+            "SpearfishingNotebook" => true,
+            "Quest" => true,
             "HousingMapMarkerInfo" => configuration.DrawHousingMapMarkers,
             _ => false,
         };
@@ -1301,7 +1285,7 @@ public class MapWindow : Window, IDisposable
             drawList.AddImage(texture.Handle, center - size / 2.0f, center + size / 2.0f);
         }
 
-        if (Vector2.Distance(ImGui.GetMousePos(), center) <= MathF.Max(radius, 14.0f))
+        if (IsMouseInsideMapCanvas() && Vector2.Distance(ImGui.GetMousePos(), center) <= MathF.Max(radius, 14.0f))
         {
             ImGui.SetTooltip($"{GetLocalCategoryDisplayName(marker.Category)}: {marker.Name}\n{marker.Position.X:F1}, {marker.Position.Z:F1}");
             if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
@@ -1388,7 +1372,7 @@ public class MapWindow : Window, IDisposable
         drawList.AddCircleFilled(center, radius, fillColor, 16);
         drawList.AddCircle(center, radius, outlineColor, 16, MathF.Max(1.0f, Scale));
 
-        return IsBoundedBy(ImGui.GetMousePos(), center - new Vector2(radius), center + new Vector2(radius));
+        return IsMouseInsideMapCanvas() && IsBoundedBy(ImGui.GetMousePos(), center - new Vector2(radius), center + new Vector2(radius));
     }
 
     private void DrawFateMarkers()
@@ -1437,7 +1421,7 @@ public class MapWindow : Window, IDisposable
         }
 
         var iconHoverRadius = 14.0f;
-        if (Vector2.Distance(ImGui.GetMousePos(), center) <= MathF.Max(iconHoverRadius, MathF.Min(radius, 32.0f)))
+        if (IsMouseInsideMapCanvas() && Vector2.Distance(ImGui.GetMousePos(), center) <= MathF.Max(iconHoverRadius, MathF.Min(radius, 32.0f)))
         {
             ImGui.SetTooltip($"FATE: {fate.Name}\nLevel: {fate.Level}\nProgress: {fate.Progress}%\nTime: {FormatTimeRemaining(fate.TimeRemaining)}");
             if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
@@ -1463,6 +1447,12 @@ public class MapWindow : Window, IDisposable
                (GetPlayerMapPosition(position) +
                 GetMapOffsetVector() +
                 GetMapCenterOffsetVector()) * Scale;
+    }
+
+    private bool IsMouseInsideMapCanvas()
+    {
+        return HoveredFlags.HasFlag(HoverFlags.Window)
+               && IsBoundedBy(ImGui.GetMousePos(), currentMapScreenPosition, currentMapScreenPosition + currentMapPixelSize);
     }
 
     private bool IsOtherPlayer(IGameObject gameObject)
@@ -1518,7 +1508,7 @@ public class MapWindow : Window, IDisposable
         const float selectionRadius = 18.0f;
         var mousePosition = ImGui.GetMousePos();
 
-        if (configuration.DrawTreasureMaps)
+        if (true)
         {
             foreach (var spot in GetTreasureMapSpotsForCurrentMap())
             {
@@ -1655,7 +1645,7 @@ public class MapWindow : Window, IDisposable
         var position = new Vector3(flag.XFloat, 0, flag.YFloat);
         var iconId = flag.MapMarker.IconId == 0 ? 60561 : flag.MapMarker.IconId;
         DrawFlagIcon((int)iconId, position);
-        if (ImGui.IsItemHovered())
+        if (ImGui.IsItemHovered() && IsMouseInsideMapCanvas())
         {
             ImGui.SetTooltip($"Flag: {flag.XFloat:F1}, {flag.YFloat:F1}");
             if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
@@ -1738,12 +1728,12 @@ public class MapWindow : Window, IDisposable
 
         ImGui.SetCursorPos(p);
         ImGui.Image(texture.Handle, size);
-        if (ImGui.IsItemHovered() && !string.IsNullOrWhiteSpace(tooltip))
+        if (ImGui.IsItemHovered() && IsMouseInsideMapCanvas() && !string.IsNullOrWhiteSpace(tooltip))
         {
             ImGui.SetTooltip(tooltip);
         }
 
-        if (ImGui.IsItemHovered() && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+        if (ImGui.IsItemHovered() && IsMouseInsideMapCanvas() && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
             AddClickedMapElement("PlacedMapMarker", (uint)iconId, string.IsNullOrWhiteSpace(tooltip) ? "Placed map marker" : tooltip, GetWorldPositionForMapCoordinate(mapPosition));
             AddNearbyMapElementsToSelection();
@@ -1787,7 +1777,7 @@ public class MapWindow : Window, IDisposable
 
         ImGui.GetWindowDrawList().AddImage(texture.Handle, center - size / 2.0f, center + size / 2.0f);
 
-        if (Vector2.Distance(ImGui.GetMousePos(), center) <= size.X / 2.0f)
+        if (IsMouseInsideMapCanvas() && Vector2.Distance(ImGui.GetMousePos(), center) <= size.X / 2.0f)
         {
             ImGui.SetTooltip($"Field Marker {label}: {position.X:F1}, {position.Z:F1}");
             if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
