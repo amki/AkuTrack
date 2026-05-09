@@ -721,7 +721,9 @@ public class MapWindow : Window, IDisposable
     {
         var texture = textureProvider.GetFromGameIcon(60443).GetWrapOrEmpty();
         var angle = -rotation + MathF.PI / 2.0f;
-        var size = texture.Size / 2.0f * Scale * iconScale;
+        var scaledSize = texture.Size / 2.0f * Scale * iconScale;
+        var minimumSize = new Vector2(36.0f * ImGuiHelpers.GlobalScale * iconScale);
+        var size = new Vector2(MathF.Max(scaledSize.X, minimumSize.X), MathF.Max(scaledSize.Y, minimumSize.Y));
 
         var p = currentMapScreenPosition +
                            DrawPosition +
@@ -759,8 +761,9 @@ public class MapWindow : Window, IDisposable
         var angle = -camera->CalculateSceneCameraYaw() + MathF.PI * 1.5f;
         var direction = AngleToDirection(angle);
         const float halfConeAngle = MathF.PI / 5.5f;
-        var coneOrigin = center - direction * (7.0f * Scale);
-        var coneLength = 36.0f * Scale;
+        var coneScale = MathF.Max(Scale, ImGuiHelpers.GlobalScale);
+        var coneOrigin = center - direction * (7.0f * coneScale);
+        var coneLength = 36.0f * coneScale;
         var left = coneOrigin + AngleToDirection(angle - halfConeAngle) * coneLength;
         var right = coneOrigin + AngleToDirection(angle + halfConeAngle) * coneLength;
 
