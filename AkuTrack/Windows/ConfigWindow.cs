@@ -99,6 +99,20 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var drawMapMarkersWithIcons = configuration.DrawMapMarkersWithIcons;
+        if (ImGui.Checkbox("Draw map markers with icons?", ref drawMapMarkersWithIcons))
+        {
+            configuration.DrawMapMarkersWithIcons = drawMapMarkersWithIcons;
+            configuration.Save();
+        }
+
+        var drawMapMarkerLabelsOnly = configuration.DrawMapMarkerLabelsOnly;
+        if (ImGui.Checkbox("Draw map marker labels only?", ref drawMapMarkerLabelsOnly))
+        {
+            configuration.DrawMapMarkerLabelsOnly = drawMapMarkerLabelsOnly;
+            configuration.Save();
+        }
+
         var drawSightseeingLogEntries = configuration.DrawSightseeingLogEntries;
         if (ImGui.Checkbox("Draw sightseeing log entries?", ref drawSightseeingLogEntries))
         {

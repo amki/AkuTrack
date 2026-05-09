@@ -271,7 +271,21 @@ public class MapWindow : Window, IDisposable
                 }
                 var pos = new Vector2(row.X, row.Y);
                 //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
-                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation, row.PlaceNameSubtext.RowId);
+                var text = row.PlaceNameSubtext.Value.Name.ToString();
+                if (row.Icon == 0)
+                {
+                    if (configuration.DrawMapMarkerLabelsOnly)
+                    {
+                        DrawMapLabelOnly(pos, text);
+                    }
+
+                    continue;
+                }
+
+                if (configuration.DrawMapMarkersWithIcons)
+                {
+                    DrawMapIcon(row.Icon, pos, 3.14f, text, row.SubtextOrientation, row.PlaceNameSubtext.RowId);
+                }
             }
         } catch(ArgumentOutOfRangeException) {
             // FIXME: How to get markers from region maps?!?
@@ -588,6 +602,18 @@ public class MapWindow : Window, IDisposable
                 ImGui.TextColored(configuration.TextColor, text.ToString());
             }
         }
+    }
+
+    private void DrawMapLabelOnly(Vector2 position, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var p = (position * Scale) + DrawPosition;
+        ImGui.SetCursorPos(p);
+        ImGui.TextColored(configuration.TextColor, text);
     }
 
     public static bool IsRegionIcon(int iconId) =>
@@ -1056,6 +1082,11 @@ public class MapWindow : Window, IDisposable
 
         for (var i = 0; i < agentMap->MapMarkerCount && i < agentMap->MapMarkers.Length; i++)
         {
+            if (!configuration.DrawMapMarkersWithIcons)
+            {
+                continue;
+            }
+
             var marker = agentMap->MapMarkers[i];
             if (marker.DataType != 0 || marker.DataKey != 0)
             {
