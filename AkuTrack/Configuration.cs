@@ -28,6 +28,11 @@ public class Configuration : IPluginConfiguration
     public bool ToggleMapWithGameMap { get; set; } = false;
     public bool CenterOnPlayerWhenOpening { get; set; } = false;
     public bool KeepPlayerCentered { get; set; } = false;
+    public bool ConfigMapBehaviorOpen { get; set; } = false;
+    public bool ConfigPlayersOpen { get; set; } = false;
+    public bool ConfigWorldContentOpen { get; set; } = false;
+    public bool ConfigMapMarkersOpen { get; set; } = false;
+    public bool ConfigAppearanceDebugOpen { get; set; } = false;
 
     public Vector4 TextColor { get; set; } = new Vector4(1.0f, 0.0f, 1.0f, 1.0f);
 
