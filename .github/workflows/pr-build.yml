@@ -1,4 +1,4 @@
-name: Sample PR Builder for SamplePlugin
+name: AkuTrack PR Builder
 
 on:
   pull_request:
@@ -9,9 +9,6 @@ jobs:
   build:
     runs-on: windows-2022
 
-    env:
-      Solution_Name: SamplePlugin
-
     steps:
     - name: Checkout
       uses: actions/checkout@v5
@@ -19,7 +16,7 @@ jobs:
     - name: Install .NET
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.x
 
     - name: Download Dalamud
       run: |
@@ -32,8 +29,8 @@ jobs:
     - name: Store artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: SamplePlugin
-        path: .\SamplePlugin\bin\x64\Release\SamplePlugin\*
+        name: AkuTrack
+        path: .\AkuTrack\bin\x64\Release\AkuTrack\*
         if-no-files-found: error
         retention-days: 1
 
