@@ -89,6 +89,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<BottomBar>()
             .AddSingleton(windowSystem)
             .AddTransient<DetailsWindow>()
+            .AddTransient<SightseeingLogEntryWindow>()
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();

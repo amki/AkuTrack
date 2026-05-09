@@ -42,7 +42,6 @@ public class MapWindow : Window, IDisposable
 {
     private readonly record struct ClickedPlayer(string Name, uint EntityId, Vector3 Position, bool IsFriend);
     private readonly record struct ClickedAetheryte(string Name, uint AetheryteId, byte SubIndex, uint GilCost);
-    private readonly record struct ClickedSightseeingLogEntry(uint RowId, string Name, string Description, string Time, string Weather, string Emote);
 
     private readonly Plugin plugin;
     private readonly Configuration configuration;
@@ -83,7 +82,7 @@ public class MapWindow : Window, IDisposable
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
     private List<ClickedAetheryte> clickedAetherytes = new();
-    private List<ClickedSightseeingLogEntry> clickedSightseeingLogEntries = new();
+    private List<SightseeingLogEntryInfo> clickedSightseeingLogEntries = new();
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly BottomBar bottomBar;
@@ -491,35 +490,28 @@ public class MapWindow : Window, IDisposable
 
         foreach (var entry in clickedSightseeingLogEntries)
         {
-            if (ImGui.BeginMenu($"Vista #{entry.RowId}: {entry.Name}"))
+            if (ImGui.MenuItem($"Vista #{entry.RowId}: {entry.Name}"))
             {
-                DrawSightseeingLogEntryDetails(entry);
-                ImGui.EndMenu();
+                OpenSightseeingLogEntryWindow(entry);
             }
         }
     }
 
-    private static void DrawSightseeingLogEntryDetails(ClickedSightseeingLogEntry entry)
+    private void OpenSightseeingLogEntryWindow(SightseeingLogEntryInfo entry)
     {
-        if (!string.IsNullOrWhiteSpace(entry.Description))
+        var newName = $"akutrack_sightseeing_{entry.RowId}";
+        foreach (var window in windowSystem.Windows)
         {
-            ImGui.TextWrapped(entry.Description);
+            var splitName = window.WindowName.Split("##");
+            if (splitName.Length > 1 && splitName[1] == newName)
+            {
+                return;
+            }
         }
 
-        if (!string.IsNullOrWhiteSpace(entry.Emote))
-        {
-            ImGui.TextUnformatted($"Emote: {entry.Emote}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(entry.Time))
-        {
-            ImGui.TextUnformatted($"Time: {entry.Time}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(entry.Weather))
-        {
-            ImGui.TextUnformatted($"Weather: {entry.Weather}");
-        }
+        var detailsWindow = ActivatorUtilities.CreateInstance<SightseeingLogEntryWindow>(plugin.serviceProvider, entry);
+        windowSystem.AddWindow(detailsWindow);
+        detailsWindow.Toggle();
     }
 
     private void DrawIcon(int iconid, Vector3 position, float rotation, Vector4 tint)
@@ -783,7 +775,7 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void DrawSightseeingLogMarker(ClickedSightseeingLogEntry entry, Vector3 position)
+    private void DrawSightseeingLogMarker(SightseeingLogEntryInfo entry, Vector3 position)
     {
         var texture = textureProvider.GetFromGameIcon(60071).GetWrapOrEmpty();
         var center = GetMapScreenPosition(position);
@@ -806,13 +798,13 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private static ClickedSightseeingLogEntry BuildSightseeingLogEntry(Lumina.Excel.Sheets.Adventure entry)
+    private static SightseeingLogEntryInfo BuildSightseeingLogEntry(Lumina.Excel.Sheets.Adventure entry)
     {
         var time = string.Empty;
         var weather = string.Empty;
         var emote = entry.Emote.Value.Name.ToString();
 
-        return new ClickedSightseeingLogEntry(
+        return new SightseeingLogEntryInfo(
             entry.RowId,
             entry.Name.ToString(),
             entry.Description.ToString(),
