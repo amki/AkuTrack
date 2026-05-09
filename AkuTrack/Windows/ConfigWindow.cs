@@ -161,26 +161,6 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Check all##TreasureMaps_check_all"))
-        {
-            foreach (var rank in ranks)
-            {
-                configuration.SetTreasureMapRankEnabled(rank.Id, true);
-            }
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Uncheck all##TreasureMaps_uncheck_all"))
-        {
-            foreach (var rank in ranks)
-            {
-                configuration.SetTreasureMapRankEnabled(rank.Id, false);
-            }
-            configuration.Save();
-        }
-
         foreach (var rank in ranks)
         {
             DrawCheckbox($"{rank.Name}##TreasureMaps_{rank.Id}", configuration.IsTreasureMapRankEnabled(rank.Id), value => configuration.SetTreasureMapRankEnabled(rank.Id, value));
@@ -243,26 +223,6 @@ public class ConfigWindow : Window, IDisposable
             foreach (var option in options)
             {
                 configuration.SetIconCategoryEntryEnabled(category, option.IconId, allChecked);
-            }
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.SmallButton($"Check all##{category}_check_all"))
-        {
-            foreach (var option in options)
-            {
-                configuration.SetIconCategoryEntryEnabled(category, option.IconId, true);
-            }
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.SmallButton($"Uncheck all##{category}_uncheck_all"))
-        {
-            foreach (var option in options)
-            {
-                configuration.SetIconCategoryEntryEnabled(category, option.IconId, false);
             }
             configuration.Save();
         }
