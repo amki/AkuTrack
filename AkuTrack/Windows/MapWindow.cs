@@ -268,7 +268,7 @@ public class MapWindow : Window, IDisposable
                     DrawAkuGameObject(o.Value);
             }
         }
-        
+
         try
         {
             var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().GetRow(currentMap);
@@ -1703,22 +1703,6 @@ public class MapWindow : Window, IDisposable
         if (agentMap == null)
         {
             return;
-        }
-
-        for (var i = 0; i < agentMap->MapMarkerCount && i < agentMap->MapMarkers.Length; i++)
-        {
-            if (!configuration.DrawMapMarkersWithIcons)
-            {
-                continue;
-            }
-
-            var marker = agentMap->MapMarkers[i];
-            if (marker.DataType != 0 || marker.DataKey != 0)
-            {
-                continue;
-            }
-
-            DrawPlacedMapMarker(marker.MapMarker, string.Empty);
         }
 
         for (var i = 0; i < agentMap->TempMapMarkerCount && i < agentMap->TempMapMarkers.Length; i++)
