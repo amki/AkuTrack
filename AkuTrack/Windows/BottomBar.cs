@@ -45,6 +45,33 @@ namespace AkuTrack.Windows
                 {
                     searchWindow.Toggle();
                 }
+                ImGui.SameLine();
+                var mapFilterEnabled = configuration.MapSearchFilterEnabled;
+                if (ImGui.Checkbox("Filter##map_search_filter_enabled", ref mapFilterEnabled))
+                {
+                    configuration.MapSearchFilterEnabled = mapFilterEnabled;
+                    configuration.Save();
+                }
+                if (configuration.MapSearchFilterEnabled)
+                {
+                    ImGui.SameLine();
+                    var filterText = configuration.MapSearchFilterText;
+                    ImGui.SetNextItemWidth(180.0f * ImGuiHelpers.GlobalScale);
+                    if (ImGui.InputTextWithHint("##map_search_filter_text", "Search map", ref filterText, 128))
+                    {
+                        configuration.MapSearchFilterText = filterText;
+                        configuration.Save();
+                    }
+                    if (!string.IsNullOrWhiteSpace(configuration.MapSearchFilterText))
+                    {
+                        ImGui.SameLine();
+                        if (ImGui.Button("Clear##map_search_filter_clear"))
+                        {
+                            configuration.MapSearchFilterText = string.Empty;
+                            configuration.Save();
+                        }
+                    }
+                }
 
                 if (true /*isMapHovered*/)
                 {

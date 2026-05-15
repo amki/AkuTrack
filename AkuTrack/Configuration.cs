@@ -35,6 +35,8 @@ public class Configuration : IPluginConfiguration
     public bool ToggleMapWithGameMap { get; set; } = false;
     public bool CenterOnPlayerWhenOpening { get; set; } = false;
     public bool KeepPlayerCentered { get; set; } = false;
+    public bool MapSearchFilterEnabled { get; set; } = false;
+    public string MapSearchFilterText { get; set; } = string.Empty;
     public bool ConfigMapBehaviorOpen { get; set; } = false;
     public bool ConfigPlayersOpen { get; set; } = false;
     public bool ConfigWorldContentOpen { get; set; } = false;

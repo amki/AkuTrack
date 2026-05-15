@@ -282,6 +282,11 @@ public class MapWindow : Window, IDisposable
                 var pos = new Vector2(row.X, row.Y);
                 //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
                 var text = row.PlaceNameSubtext.Value.Name.ToString();
+                if (!MatchesMapSearch("MapMarker", text, row.PlaceNameSubtext.RowId.ToString(), row.Icon.ToString()))
+                {
+                    continue;
+                }
+
                 if (row.Icon == 0)
                 {
                     if (configuration.DrawMapMarkerLabelsOnly)
@@ -411,6 +416,8 @@ public class MapWindow : Window, IDisposable
     private void DrawAkuGameObject(AkuGameObject obj) {
         if (obj.mid != currentMap)
             return;
+        if (!MatchesMapSearch(obj.t, obj.name, obj.bid.ToString(), obj.nid?.ToString(), obj.npiid?.ToString()))
+            return;
         if (obj.t == "EventNpc")
         {
             if (!configuration.DrawENpc)
@@ -519,6 +526,23 @@ public class MapWindow : Window, IDisposable
 
     private void DrawTooltip(AkuGameObject obj) {
         ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
+    }
+
+    private bool IsMapSearchFilterActive()
+    {
+        return configuration.MapSearchFilterEnabled && !string.IsNullOrWhiteSpace(configuration.MapSearchFilterText);
+    }
+
+    private bool MatchesMapSearch(params string?[] values)
+    {
+        if (!IsMapSearchFilterActive())
+        {
+            return true;
+        }
+
+        var search = configuration.MapSearchFilterText.Trim();
+        return values.Any(value => !string.IsNullOrWhiteSpace(value)
+                                   && value.Contains(search, StringComparison.CurrentCultureIgnoreCase));
     }
 
     public void DrawAkuObjectContextMenu()
@@ -813,6 +837,10 @@ public class MapWindow : Window, IDisposable
             {
                 continue;
             }
+            if (!MatchesMapSearch("Party member", member.Name.ToString(), member.ClassJob.RowId.ToString()))
+            {
+                continue;
+            }
 
             var tint = GetPlayerMarkerTint(member.ClassJob.RowId, new Vector4(0.3f, 0.85f, 1.0f, 1.0f));
             if (DrawPlayerIcon(memberObject.Position, memberObject.Rotation, tint, 0.75f))
@@ -892,7 +920,13 @@ public class MapWindow : Window, IDisposable
             }
 
             var position = new Vector3(level.X, 0, level.Z);
-            DrawSightseeingLogMarker(BuildSightseeingLogEntry(entry), position);
+            var sightseeingEntry = BuildSightseeingLogEntry(entry);
+            if (!MatchesMapSearch("Sightseeing", "Vista", sightseeingEntry.Name, sightseeingEntry.RowId.ToString()))
+            {
+                continue;
+            }
+
+            DrawSightseeingLogMarker(sightseeingEntry, position);
         }
     }
 
@@ -940,7 +974,8 @@ public class MapWindow : Window, IDisposable
     {
         foreach (var spot in GetTreasureMapSpotsForCurrentMap())
         {
-            if (configuration.IsTreasureMapRankEnabled(spot.RankId))
+            if (configuration.IsTreasureMapRankEnabled(spot.RankId)
+                && MatchesMapSearch("TreasureMaps", "Treasure map", spot.RankName, spot.RankId.ToString()))
             {
                 DrawTreasureMapSpot(spot);
             }
@@ -1118,7 +1153,8 @@ public class MapWindow : Window, IDisposable
     private bool ShouldDrawLocalCategoryMarker(LocalMapCategoryMarker marker)
     {
         return ShouldDrawLocalCategoryMarker(marker.Category)
-               && configuration.IsIconCategoryEntryEnabled(marker.Category, marker.IconId);
+               && configuration.IsIconCategoryEntryEnabled(marker.Category, marker.IconId)
+               && MatchesMapSearch(marker.Category, GetLocalCategoryDisplayName(marker.Category), marker.Name, marker.RowId.ToString(), marker.IconId.ToString());
     }
 
     private void AddFishingSpotMarkers(List<LocalMapCategoryMarker> markers)
@@ -1376,6 +1412,11 @@ public class MapWindow : Window, IDisposable
             }
 
             var isFriend = IsFriend(character);
+            if (!MatchesMapSearch(isFriend ? "Friend" : "Player", character.Name.ToString(), character.ClassJob.RowId.ToString()))
+            {
+                continue;
+            }
+
             if (DrawOtherPlayerCircle(gameObject.Position, isFriend))
             {
                 ImGui.SetTooltip($"{(isFriend ? "Friend" : "Player")}: {character.Name}");
@@ -1422,6 +1463,10 @@ public class MapWindow : Window, IDisposable
             }
 
             if (fate.TerritoryType.RowId != currentTerritory || fate.State is not (FateState.Preparing or FateState.Running))
+            {
+                continue;
+            }
+            if (!MatchesMapSearch("FATE", fate.Name.ToString(), fate.FateId.ToString(), fate.Level.ToString()))
             {
                 continue;
             }
@@ -1517,6 +1562,10 @@ public class MapWindow : Window, IDisposable
             {
                 continue;
             }
+            if (!MatchesMapSearch(IsFriend(character) ? "Friend" : "Player", character.Name.ToString(), character.ClassJob.RowId.ToString()))
+            {
+                continue;
+            }
 
             if (Vector2.Distance(mousePosition, GetMapScreenPosition(gameObject.Position)) <= selectionRadius)
             {
@@ -1545,6 +1594,10 @@ public class MapWindow : Window, IDisposable
             foreach (var spot in GetTreasureMapSpotsForCurrentMap())
             {
                 if (!configuration.IsTreasureMapRankEnabled(spot.RankId))
+                {
+                    continue;
+                }
+                if (!MatchesMapSearch("TreasureMaps", "Treasure map", spot.RankName, spot.RankId.ToString()))
                 {
                     continue;
                 }
@@ -1578,6 +1631,10 @@ public class MapWindow : Window, IDisposable
             foreach (var fate in fateTable)
             {
                 if (fate is null || !fateTable.IsValid(fate) || fate.TerritoryType.RowId != currentTerritory || fate.State is not (FateState.Preparing or FateState.Running))
+                {
+                    continue;
+                }
+                if (!MatchesMapSearch("FATE", fate.Name.ToString(), fate.FateId.ToString(), fate.Level.ToString()))
                 {
                     continue;
                 }
@@ -1673,6 +1730,10 @@ public class MapWindow : Window, IDisposable
         {
             return;
         }
+        if (!MatchesMapSearch("Flag", "Map flag", currentMap.ToString(), currentTerritory.ToString()))
+        {
+            return;
+        }
 
         var position = new Vector3(flag.XFloat, 0, flag.YFloat);
         var iconId = flag.MapMarker.IconId == 0 ? 60561 : flag.MapMarker.IconId;
@@ -1731,6 +1792,12 @@ public class MapWindow : Window, IDisposable
 
     private void DrawPlacedMapMarkerIcon(int iconId, Vector2 mapPosition, string tooltip)
     {
+        var name = string.IsNullOrWhiteSpace(tooltip) ? "Placed map marker" : tooltip;
+        if (!MatchesMapSearch("PlacedMapMarker", "Placed map marker", name, iconId.ToString()))
+        {
+            return;
+        }
+
         var texture = textureProvider.GetFromGameIcon(iconId).GetWrapOrEmpty();
         var size = texture.Size / 2.0f;
         var p = mapPosition * Scale + DrawPosition - size / 2.0f;
@@ -1751,7 +1818,7 @@ public class MapWindow : Window, IDisposable
 
         if (ImGui.IsItemHovered() && IsMouseInsideMapCanvas() && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
         {
-            AddClickedMapElement("PlacedMapMarker", (uint)iconId, string.IsNullOrWhiteSpace(tooltip) ? "Placed map marker" : tooltip, GetWorldPositionForMapCoordinate(mapPosition));
+            AddClickedMapElement("PlacedMapMarker", (uint)iconId, name, GetWorldPositionForMapCoordinate(mapPosition));
             AddNearbyMapElementsToSelection();
             AddNearbyOtherPlayersToSelection();
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
@@ -1786,6 +1853,11 @@ public class MapWindow : Window, IDisposable
 
     private void DrawFieldMarker(int markerIndex, string label, Vector3 position)
     {
+        if (!MatchesMapSearch("FieldMarker", "Field marker", $"Field Marker {label}", label, markerIndex.ToString()))
+        {
+            return;
+        }
+
         var center = GetMapScreenPosition(position);
         var iconId = GetFieldMarkerIconId(markerIndex);
         var texture = textureProvider.GetFromGameIcon(iconId).GetWrapOrEmpty();
