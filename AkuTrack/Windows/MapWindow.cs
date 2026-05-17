@@ -82,6 +82,7 @@ public class MapWindow : Window, IDisposable
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
     private Vector2 currentMapScreenPosition = new(0, 0);
+    private string currentCursorPositionText = string.Empty;
     private bool suppressFlagPlacement;
     private bool pendingFlagFocus;
     private (uint TerritoryId, uint MapId, float X, float Y)? lastFocusedFlag;
@@ -92,7 +93,6 @@ public class MapWindow : Window, IDisposable
     private Dictionary<uint, List<MapMarkerLink>>? fallbackMapLinksByPlaceName;
     private Dictionary<string, List<MapMarkerLink>>? fallbackMapLinksByName;
     private Dictionary<string, List<MapMarkerLink>>? territoryMapLinksByName;
-
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
     private List<ClickedAetheryte> clickedAetherytes = new();
@@ -100,6 +100,7 @@ public class MapWindow : Window, IDisposable
     private List<ClickedMapElement> clickedMapElements = new();
 
     private readonly MapContextMenu mapContextMenu = new();
+    private readonly TopBar topBar;
     private readonly BottomBar bottomBar;
 
     public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
@@ -112,6 +113,7 @@ public class MapWindow : Window, IDisposable
         Configuration configuration,
         ObjTrackManager objTrackManager,
         UploadManager uploadManager,
+        TopBar topBar,
         BottomBar bottomBar,
         WindowSystem windowSystem,
         IDataManager dataManager,
@@ -139,6 +141,7 @@ public class MapWindow : Window, IDisposable
         this.aetheryteList = aetheryteList;
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
+        this.topBar = topBar;
         this.bottomBar = bottomBar;
         this.windowSystem = windowSystem;
         this.textureProvider = textureProvider;
@@ -210,24 +213,50 @@ public class MapWindow : Window, IDisposable
             HoveredFlags |= HoverFlags.Window;
         }
 
-        using (var renderChild = ImRaii.Child("render_child", ImGui.GetContentRegionAvail(), false, ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoScrollbar))
+        topBar.Draw(GetCurrentMapDisplayPath(currentMap), GetTopBarCursorPositionText());
+
+        using (var childStyle = ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 0.0f))
+        using (var renderChild = ImRaii.Child("render_child", GetMapCanvasSize(), false, ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoScrollbar))
         {
             currentMapScreenPosition = ImGui.GetWindowPos();
             currentMapPixelSize = ImGui.GetWindowSize();
             DrawMapElements();
-
-            // Reset Draw Position for Overlay Extras
-            ImGui.SetCursorPos(Vector2.Zero);
-            //DrawToolbar();
-            bottomBar.Draw(HoveredFlags.HasFlag(HoverFlags.MapTexture), currentMapPixelSize, DrawPosition, DrawOffset, Scale);
+            if (ImGui.IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByPopup))
+            {
+                HoveredFlags |= HoverFlags.WindowInnerFrame;
+            }
         }
 
+        bottomBar.Draw(HoveredFlags.HasFlag(HoverFlags.MapTexture), currentMapPixelSize, DrawPosition, DrawOffset, Scale, GetBottomBarPlayerPositionText());
 
-        if (ImGui.IsItemHovered())
-        {
-            HoveredFlags |= HoverFlags.WindowInnerFrame;
-        }
+
         ProcessInputs();
+    }
+
+    private string GetTopBarCursorPositionText()
+    {
+        if (IsMouseInsideMapCanvas())
+        {
+            var cursor = TexturePixelToIngameCoord(GetMouseMapCoordinate());
+            currentCursorPositionText = $"X:{cursor.X:F1} Y:{cursor.Y:F1}";
+        }
+
+        return currentCursorPositionText;
+    }
+
+    private Vector2 GetMapCanvasSize()
+    {
+        var scale = ImGuiHelpers.GlobalScale;
+        var footerHeight = 24.0f * scale;
+        var available = ImGui.GetContentRegionAvail();
+        return new Vector2(available.X, MathF.Max(120.0f * scale, available.Y - footerHeight));
+    }
+
+    private string GetBottomBarPlayerPositionText()
+    {
+        return currentMap == clientState.MapId && objectTable.LocalPlayer is { } player
+            ? FormatPlayerMapPosition(player.Position)
+            : string.Empty;
     }
 
     private unsafe void UpdateWindowTitle()
@@ -245,13 +274,7 @@ public class MapWindow : Window, IDisposable
             linkedMapParentPath = string.Empty;
         }
 
-        var mapPath = GetMapDisplayPath(selectedMapId);
-        if (linkedMapPathTarget == selectedMapId && !string.IsNullOrWhiteSpace(linkedMapParentPath))
-        {
-            mapPath = CombineMapPath(linkedMapParentPath, GetMapDisplayPath(selectedMapId, false));
-        }
-
-        var visibleTitle = $"AkuTrack - Map - {mapPath}";
+        var visibleTitle = $"AkuTrack - Map - {GetCurrentMapDisplayPath(selectedMapId)}";
         var windowTitle = $"{visibleTitle}##akutrack_map";
 
         if (currentWindowTitle == windowTitle)
@@ -279,6 +302,17 @@ public class MapWindow : Window, IDisposable
         AddMapPathPart(parts, map.PlaceName.ValueNullable?.Name.ToString());
         AddMapPathPart(parts, map.PlaceNameSub.ValueNullable?.Name.ToString());
         return parts.Count == 0 ? $"Map #{mapId}" : string.Join(" > ", parts);
+    }
+
+    private string GetCurrentMapDisplayPath(uint mapId)
+    {
+        var mapPath = GetMapDisplayPath(mapId);
+        if (linkedMapPathTarget == mapId && !string.IsNullOrWhiteSpace(linkedMapParentPath))
+        {
+            mapPath = CombineMapPath(linkedMapParentPath, GetMapDisplayPath(mapId, false));
+        }
+
+        return mapPath;
     }
 
     private static string CombineMapPath(string parentPath, string childPath)
@@ -419,6 +453,21 @@ public class MapWindow : Window, IDisposable
         }
 
         DrawFieldMarkers();
+    }
+
+    private static string FormatPlayerMapPosition(Vector3 worldPosition)
+    {
+        var mapPosition = TexturePixelToIngameCoord(GetMapCoordinateFor3D(worldPosition));
+        return $"X:{mapPosition.X:F1} Y:{mapPosition.Y:F1} Z:{worldPosition.Y:F1}";
+    }
+
+    private static Vector2 TexturePixelToIngameCoord(Vector2 textureCoord)
+    {
+        var tmp = (textureCoord - GetMapCenterOffsetVector()) / GetMapScaleFactor() + GetRawMapOffsetVector();
+        tmp *= GetMapScaleFactor();
+        return new Vector2(
+            MathF.Round(41.0f / GetMapScaleFactor() * ((tmp.X + 1024.0f) / 2048.0f) + 1.0f, 1),
+            MathF.Round(41.0f / GetMapScaleFactor() * ((tmp.Y + 1024.0f) / 2048.0f) + 1.0f, 1));
     }
 
     private unsafe void DrawMapBackground()
@@ -2400,7 +2449,7 @@ public class MapWindow : Window, IDisposable
         // Don't allow a drag to start if the window size is changing
         if (ImGui.GetWindowSize() == lastWindowSize && HoveredFlags != HoverFlags.Nothing)
         {
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Left) && !isDragStarted)
+            if (HoveredFlags.HasFlag(HoverFlags.MapTexture) && ImGui.IsMouseClicked(ImGuiMouseButton.Left) && !isDragStarted)
             {
                 isDragStarted = true;
                 //System.SystemConfig.FollowPlayer = false;
