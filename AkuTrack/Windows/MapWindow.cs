@@ -86,6 +86,8 @@ public class MapWindow : Window, IDisposable
     private List<TreasureMapSpotInfo> treasureMapSpotCache = new();
     private uint localCategoryMarkerCacheMap;
     private List<LocalMapCategoryMarker> localCategoryMarkerCache = new();
+    private Dictionary<uint, List<MapMarkerLink>>? fallbackMapLinksByPlaceName;
+    private Dictionary<string, List<MapMarkerLink>>? fallbackMapLinksByName;
 
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
@@ -283,8 +285,9 @@ public class MapWindow : Window, IDisposable
                 var pos = new Vector2(row.X, row.Y);
                 //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
                 var text = row.PlaceNameSubtext.Value.Name.ToString();
-                var link = GetMapMarkerLink(row);
-                if (!MatchesMapSearch("MapMarker", text, link?.Name, row.PlaceNameSubtext.RowId.ToString(), row.Icon.ToString()))
+                var links = GetMapMarkerLinks(row);
+                var linkNames = links.Count == 0 ? string.Empty : string.Join(" ", links.Select(link => link.Name));
+                if (!MatchesMapSearch("MapMarker", text, linkNames, row.PlaceNameSubtext.RowId.ToString(), row.Icon.ToString()))
                 {
                     continue;
                 }
@@ -293,7 +296,7 @@ public class MapWindow : Window, IDisposable
                 {
                     if (configuration.DrawMapMarkerLabelsOnly)
                     {
-                        DrawMapLabelOnly(pos, text, link);
+                        DrawMapLabelOnly(pos, text, links);
                     }
 
                     continue;
@@ -301,7 +304,7 @@ public class MapWindow : Window, IDisposable
 
                 if (configuration.DrawMapMarkersWithIcons)
                 {
-                    DrawMapIcon(row.Icon, pos, 3.14f, text, row.SubtextOrientation, row.PlaceNameSubtext.RowId, link);
+                    DrawMapIcon(row.Icon, pos, 3.14f, text, row.SubtextOrientation, row.PlaceNameSubtext.RowId, links);
                 }
             }
         } catch(ArgumentOutOfRangeException) {
@@ -657,7 +660,7 @@ public class MapWindow : Window, IDisposable
         ImGui.Image(texture.Handle, size, Vector2.Zero, Vector2.One, tint);
     }
 
-    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation, uint placeNameSubtextId = 0, MapMarkerLink? link = null)
+    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation, uint placeNameSubtextId = 0, IReadOnlyList<MapMarkerLink>? links = null)
     {
         if (IsDoubleHousingArea(iconid))
             return;
@@ -679,16 +682,17 @@ public class MapWindow : Window, IDisposable
                 var ap = p + (texture.Size * regionScaleFactor / 4.0f * Scale);
                 ImGui.SetCursorPos(ap);
                 ImGui.TextColored(configuration.TextColor, text.ToString());
+                ProcessMapMarkerClick(placeNameSubtextId, text, position, links);
             }
         } else {
             var p = (position * Scale) + DrawPosition - (texture.Size / 4.0f);
             ImGui.SetCursorPos(p);
             ImGui.Image(texture.Handle, texture.Size / 2.0f);
-            if (link is null)
+            if (links is null or { Count: 0 })
             {
                 ProcessAetheryteMapIconClick(placeNameSubtextId);
             }
-            ProcessMapMarkerClick(placeNameSubtextId, text, position, link);
+            ProcessMapMarkerClick(placeNameSubtextId, text, position, links);
             if(configuration.DrawDebugSquares)
             {
                 ImGui.SetCursorPos(p);
@@ -716,11 +720,12 @@ public class MapWindow : Window, IDisposable
                 */
                 ImGui.SetCursorPos(ap);
                 ImGui.TextColored(configuration.TextColor, text.ToString());
+                ProcessMapMarkerClick(placeNameSubtextId, text, position, links);
             }
         }
     }
 
-    private void DrawMapLabelOnly(Vector2 position, string text, MapMarkerLink? link)
+    private void DrawMapLabelOnly(Vector2 position, string text, IReadOnlyList<MapMarkerLink>? links)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -730,7 +735,7 @@ public class MapWindow : Window, IDisposable
         var p = (position * Scale) + DrawPosition;
         ImGui.SetCursorPos(p);
         ImGui.TextColored(configuration.TextColor, text);
-        ProcessMapMarkerClick(0, text, position, link);
+        ProcessMapMarkerClick(0, text, position, links);
     }
 
     public static bool IsRegionIcon(int iconId) =>
@@ -902,20 +907,43 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void ProcessMapMarkerClick(uint placeNameSubtextId, string text, Vector2 mapPosition, MapMarkerLink? link)
+    private void ProcessMapMarkerClick(uint placeNameSubtextId, string text, Vector2 mapPosition, IReadOnlyList<MapMarkerLink>? links)
     {
         if (!IsMouseInsideMapCanvas() || !ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             return;
         }
 
-        AddClickedMapElement("MapMarker", placeNameSubtextId, string.IsNullOrWhiteSpace(text) ? link?.Name ?? "Map marker" : text, GetWorldPositionForMapCoordinate(mapPosition), link);
+        var position = GetWorldPositionForMapCoordinate(mapPosition);
+        if (links is { Count: > 0 })
+        {
+            foreach (var link in links)
+            {
+                AddClickedMapElement("MapMarker", link.MapId, string.IsNullOrWhiteSpace(text) ? link.Name : text, position, link);
+            }
+        }
+        else
+        {
+            AddClickedMapElement("MapMarker", placeNameSubtextId, string.IsNullOrWhiteSpace(text) ? "Map marker" : text, position);
+        }
+
         AddNearbyMapElementsToSelection();
         AddNearbyOtherPlayersToSelection();
         ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
     }
 
-    private MapMarkerLink? GetMapMarkerLink(Lumina.Excel.Sheets.MapMarker marker)
+    private IReadOnlyList<MapMarkerLink> GetMapMarkerLinks(Lumina.Excel.Sheets.MapMarker marker)
+    {
+        var originalLink = GetOriginalMapMarkerLink(marker);
+        if (originalLink is not null)
+        {
+            return [originalLink.Value];
+        }
+
+        return GetFallbackMapMarkerLinks(marker);
+    }
+
+    private MapMarkerLink? GetOriginalMapMarkerLink(Lumina.Excel.Sheets.MapMarker marker)
     {
         if (marker.DataKey.RowId == 0 || marker.DataType is not (1 or 2))
         {
@@ -944,6 +972,105 @@ public class MapWindow : Window, IDisposable
         }
 
         return new MapMarkerLink(linkedMap.RowId, linkedMap.TerritoryType.RowId, name);
+    }
+
+    private IReadOnlyList<MapMarkerLink> GetFallbackMapMarkerLinks(Lumina.Excel.Sheets.MapMarker marker)
+    {
+        if (!IsDutyMapMarkerIcon(marker.Icon) || marker.PlaceNameSubtext.RowId == 0)
+        {
+            return [];
+        }
+
+        var linksByPlaceName = GetFallbackMapLinksByPlaceName();
+        if (linksByPlaceName.TryGetValue(marker.PlaceNameSubtext.RowId, out var links))
+        {
+            return links;
+        }
+
+        var markerName = marker.PlaceNameSubtext.ValueNullable?.Name.ToString();
+        return !string.IsNullOrWhiteSpace(markerName)
+               && GetFallbackMapLinksByName().TryGetValue(NormalizeMapLinkName(markerName), out links)
+            ? links
+            : [];
+    }
+
+    private Dictionary<uint, List<MapMarkerLink>> GetFallbackMapLinksByPlaceName()
+    {
+        if (fallbackMapLinksByPlaceName is not null)
+        {
+            return fallbackMapLinksByPlaceName;
+        }
+
+        fallbackMapLinksByPlaceName = new Dictionary<uint, List<MapMarkerLink>>();
+        fallbackMapLinksByName = new Dictionary<string, List<MapMarkerLink>>();
+        foreach (var content in dataManager.GetExcelSheet<Lumina.Excel.Sheets.ContentFinderCondition>(clientState.ClientLanguage))
+        {
+            if (!content.TerritoryType.IsValid || string.IsNullOrWhiteSpace(content.Name.ToString()))
+            {
+                continue;
+            }
+
+            var territory = content.TerritoryType.Value;
+            if (!territory.Map.IsValid || territory.Map.RowId == 0 || territory.PlaceName.RowId == 0)
+            {
+                continue;
+            }
+
+            var link = new MapMarkerLink(territory.Map.RowId, territory.RowId, content.Name.ToString());
+            if (!fallbackMapLinksByPlaceName.TryGetValue(territory.PlaceName.RowId, out var links))
+            {
+                links = new List<MapMarkerLink>();
+                fallbackMapLinksByPlaceName[territory.PlaceName.RowId] = links;
+            }
+
+            if (!links.Contains(link))
+            {
+                links.Add(link);
+            }
+
+            var normalizedName = NormalizeMapLinkName(content.Name.ToString());
+            if (!fallbackMapLinksByName!.TryGetValue(normalizedName, out var nameLinks))
+            {
+                nameLinks = new List<MapMarkerLink>();
+                fallbackMapLinksByName[normalizedName] = nameLinks;
+            }
+
+            if (!nameLinks.Contains(link))
+            {
+                nameLinks.Add(link);
+            }
+        }
+
+        foreach (var links in fallbackMapLinksByPlaceName.Values)
+        {
+            links.Sort((left, right) => string.Compare(left.Name, right.Name, StringComparison.CurrentCultureIgnoreCase));
+        }
+        foreach (var links in fallbackMapLinksByName!.Values)
+        {
+            links.Sort((left, right) => string.Compare(left.Name, right.Name, StringComparison.CurrentCultureIgnoreCase));
+        }
+
+        return fallbackMapLinksByPlaceName;
+    }
+
+    private Dictionary<string, List<MapMarkerLink>> GetFallbackMapLinksByName()
+    {
+        if (fallbackMapLinksByName is null)
+        {
+            GetFallbackMapLinksByPlaceName();
+        }
+
+        return fallbackMapLinksByName!;
+    }
+
+    private static string NormalizeMapLinkName(string name)
+    {
+        return name.Trim().ToLowerInvariant();
+    }
+
+    private static bool IsDutyMapMarkerIcon(uint iconId)
+    {
+        return iconId is 60414 or 60428 or 60442;
     }
 
     private unsafe void OpenLinkedMap(MapMarkerLink link)
