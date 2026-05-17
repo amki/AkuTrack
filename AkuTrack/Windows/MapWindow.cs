@@ -88,6 +88,7 @@ public class MapWindow : Window, IDisposable
     private List<LocalMapCategoryMarker> localCategoryMarkerCache = new();
     private Dictionary<uint, List<MapMarkerLink>>? fallbackMapLinksByPlaceName;
     private Dictionary<string, List<MapMarkerLink>>? fallbackMapLinksByName;
+    private Dictionary<string, List<MapMarkerLink>>? territoryMapLinksByName;
 
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
@@ -562,6 +563,16 @@ public class MapWindow : Window, IDisposable
                 OpenDetailsWindow(obj);
             }
         }
+        foreach (var obj in clickedObjects)
+        {
+            foreach (var link in GetObjectMapLinks(obj))
+            {
+                if (ImGui.MenuItem($"Map link {link.Name}##{obj.t}_{obj.bid}_{link.TerritoryId}_{link.MapId}"))
+                {
+                    OpenLinkedMap(link);
+                }
+            }
+        }
 
         foreach (var player in clickedPlayers)
         {
@@ -1016,7 +1027,13 @@ public class MapWindow : Window, IDisposable
                 continue;
             }
 
-            var link = new MapMarkerLink(territory.Map.RowId, territory.RowId, content.Name.ToString());
+            var linkName = content.Name.ToString();
+            var territoryPlaceName = territory.PlaceName.ValueNullable?.Name.ToString();
+            var mapPlaceName = territory.Map.ValueNullable?.PlaceName.ValueNullable?.Name.ToString();
+            var link = new MapMarkerLink(
+                territory.Map.RowId,
+                territory.RowId,
+                string.IsNullOrWhiteSpace(linkName) ? territoryPlaceName ?? $"Map #{territory.Map.RowId}" : linkName);
             if (!fallbackMapLinksByPlaceName.TryGetValue(territory.PlaceName.RowId, out var links))
             {
                 links = new List<MapMarkerLink>();
@@ -1028,17 +1045,9 @@ public class MapWindow : Window, IDisposable
                 links.Add(link);
             }
 
-            var normalizedName = NormalizeMapLinkName(content.Name.ToString());
-            if (!fallbackMapLinksByName!.TryGetValue(normalizedName, out var nameLinks))
-            {
-                nameLinks = new List<MapMarkerLink>();
-                fallbackMapLinksByName[normalizedName] = nameLinks;
-            }
-
-            if (!nameLinks.Contains(link))
-            {
-                nameLinks.Add(link);
-            }
+            AddMapLinkAlias(fallbackMapLinksByName!, linkName, link);
+            AddMapLinkAlias(fallbackMapLinksByName!, territoryPlaceName, link);
+            AddMapLinkAlias(fallbackMapLinksByName!, mapPlaceName, link);
         }
 
         foreach (var links in fallbackMapLinksByPlaceName.Values)
@@ -1063,9 +1072,126 @@ public class MapWindow : Window, IDisposable
         return fallbackMapLinksByName!;
     }
 
+    private static void AddMapLinkAlias(Dictionary<string, List<MapMarkerLink>> linksByName, string? name, MapMarkerLink link)
+    {
+        var normalizedName = NormalizeMapLinkName(name ?? string.Empty);
+        if (normalizedName.Length == 0)
+        {
+            return;
+        }
+
+        if (!linksByName.TryGetValue(normalizedName, out var links))
+        {
+            links = new List<MapMarkerLink>();
+            linksByName[normalizedName] = links;
+        }
+
+        if (!links.Contains(link))
+        {
+            links.Add(link);
+        }
+    }
+
+    private IReadOnlyList<MapMarkerLink> GetObjectMapLinks(AkuGameObject obj)
+    {
+        var candidates = new List<string>();
+        AddMapLinkNameCandidate(candidates, obj.name);
+        if (obj.t == "EventObj" && dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).TryGetRow(obj.bid, out var eObjName))
+        {
+            AddMapLinkNameCandidate(candidates, eObjName.Singular.ToString());
+        }
+        else if (obj.t == "EventNpc" && dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).TryGetRow(obj.bid, out var eNpc))
+        {
+            AddMapLinkNameCandidate(candidates, eNpc.Singular.ToString());
+        }
+
+        var result = new List<MapMarkerLink>();
+        var linksByName = GetTerritoryMapLinksByName();
+        foreach (var candidate in candidates.Select(NormalizeMapLinkName).Where(candidate => candidate.Length > 0).Distinct())
+        {
+            if (!linksByName.TryGetValue(candidate, out var links))
+            {
+                continue;
+            }
+
+            foreach (var link in links)
+            {
+                if (link.TerritoryId != currentTerritory && !result.Contains(link))
+                {
+                    result.Add(link);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static void AddMapLinkNameCandidate(List<string> candidates, string? rawName)
+    {
+        if (string.IsNullOrWhiteSpace(rawName))
+        {
+            return;
+        }
+
+        candidates.Add(rawName);
+        var name = rawName.Trim();
+        foreach (var separator in new[] { " to ", " nach ", " zum ", " zur ", " access to ", " passage to ", " gate to ", " exit to " })
+        {
+            var index = name.LastIndexOf(separator, StringComparison.CurrentCultureIgnoreCase);
+            if (index >= 0 && index + separator.Length < name.Length)
+            {
+                candidates.Add(name[(index + separator.Length)..]);
+            }
+        }
+    }
+
+    private Dictionary<string, List<MapMarkerLink>> GetTerritoryMapLinksByName()
+    {
+        if (territoryMapLinksByName is not null)
+        {
+            return territoryMapLinksByName;
+        }
+
+        territoryMapLinksByName = new Dictionary<string, List<MapMarkerLink>>();
+        foreach (var territory in dataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>(clientState.ClientLanguage))
+        {
+            if (!territory.Map.IsValid || territory.Map.RowId == 0 || !territory.PlaceName.IsValid)
+            {
+                continue;
+            }
+
+            var name = territory.PlaceName.Value.Name.ToString();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            var link = new MapMarkerLink(territory.Map.RowId, territory.RowId, name);
+            AddMapLinkAlias(territoryMapLinksByName, name, link);
+            AddMapLinkAlias(territoryMapLinksByName, territory.Map.ValueNullable?.PlaceName.ValueNullable?.Name.ToString(), link);
+        }
+
+        foreach (var links in territoryMapLinksByName.Values)
+        {
+            links.Sort((left, right) => string.Compare(left.Name, right.Name, StringComparison.CurrentCultureIgnoreCase));
+        }
+
+        return territoryMapLinksByName;
+    }
+
     private static string NormalizeMapLinkName(string name)
     {
-        return name.Trim().ToLowerInvariant();
+        var normalized = name.Trim().ToLowerInvariant();
+        foreach (var article in new[] { "the ", "a ", "an ", "der ", "die ", "das ", "den ", "dem ", "des ", "le ", "la ", "les ", "un ", "une ", "l'", "l’" })
+        {
+            if (normalized.StartsWith(article, StringComparison.Ordinal))
+            {
+                normalized = normalized[article.Length..].TrimStart();
+                break;
+            }
+        }
+
+        return string.Concat(normalized.Where(char.IsLetterOrDigit));
     }
 
     private static bool IsDutyMapMarkerIcon(uint iconId)
