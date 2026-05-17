@@ -44,7 +44,8 @@ public class MapWindow : Window, IDisposable
     private readonly record struct ClickedAetheryte(string Name, uint AetheryteId, byte SubIndex, uint GilCost);
     private readonly record struct TreasureMapSpotInfo(uint RankId, ushort SpotIndex, string RankName, byte TextureId, Vector3 Position);
     private readonly record struct LocalMapCategoryMarker(string Category, uint RowId, string Name, uint IconId, Vector3 Position, float Radius);
-    private readonly record struct ClickedMapElement(string Type, uint RowId, string Name, Vector3 Position);
+    private readonly record struct MapMarkerLink(uint MapId, uint TerritoryId, string Name);
+    private readonly record struct ClickedMapElement(string Type, uint RowId, string Name, Vector3 Position, MapMarkerLink? Link);
 
     private readonly Plugin plugin;
     private readonly Configuration configuration;
@@ -282,7 +283,8 @@ public class MapWindow : Window, IDisposable
                 var pos = new Vector2(row.X, row.Y);
                 //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
                 var text = row.PlaceNameSubtext.Value.Name.ToString();
-                if (!MatchesMapSearch("MapMarker", text, row.PlaceNameSubtext.RowId.ToString(), row.Icon.ToString()))
+                var link = GetMapMarkerLink(row);
+                if (!MatchesMapSearch("MapMarker", text, link?.Name, row.PlaceNameSubtext.RowId.ToString(), row.Icon.ToString()))
                 {
                     continue;
                 }
@@ -291,7 +293,7 @@ public class MapWindow : Window, IDisposable
                 {
                     if (configuration.DrawMapMarkerLabelsOnly)
                     {
-                        DrawMapLabelOnly(pos, text);
+                        DrawMapLabelOnly(pos, text, link);
                     }
 
                     continue;
@@ -299,7 +301,7 @@ public class MapWindow : Window, IDisposable
 
                 if (configuration.DrawMapMarkersWithIcons)
                 {
-                    DrawMapIcon(row.Icon, pos, 3.14f, text, row.SubtextOrientation, row.PlaceNameSubtext.RowId);
+                    DrawMapIcon(row.Icon, pos, 3.14f, text, row.SubtextOrientation, row.PlaceNameSubtext.RowId, link);
                 }
             }
         } catch(ArgumentOutOfRangeException) {
@@ -581,9 +583,19 @@ public class MapWindow : Window, IDisposable
 
         foreach (var element in clickedMapElements)
         {
-            if (ImGui.MenuItem($"{GetLocalCategoryDisplayName(element.Type)} {element.Name}({element.RowId})"))
+            var label = element.Link is { } link
+                ? $"Map link {link.Name}"
+                : $"{GetLocalCategoryDisplayName(element.Type)} {element.Name}({element.RowId})";
+            if (ImGui.MenuItem(label))
             {
-                OpenDetailsWindow(CreateMapElementObject(element.Type, element.RowId, element.Name, element.Position));
+                if (element.Link is { } selectedLink)
+                {
+                    OpenLinkedMap(selectedLink);
+                }
+                else
+                {
+                    OpenDetailsWindow(CreateMapElementObject(element.Type, element.RowId, element.Name, element.Position));
+                }
             }
         }
     }
@@ -645,7 +657,7 @@ public class MapWindow : Window, IDisposable
         ImGui.Image(texture.Handle, size, Vector2.Zero, Vector2.One, tint);
     }
 
-    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation, uint placeNameSubtextId = 0)
+    private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation, uint placeNameSubtextId = 0, MapMarkerLink? link = null)
     {
         if (IsDoubleHousingArea(iconid))
             return;
@@ -672,8 +684,11 @@ public class MapWindow : Window, IDisposable
             var p = (position * Scale) + DrawPosition - (texture.Size / 4.0f);
             ImGui.SetCursorPos(p);
             ImGui.Image(texture.Handle, texture.Size / 2.0f);
-            ProcessAetheryteMapIconClick(placeNameSubtextId);
-            ProcessMapMarkerClick(placeNameSubtextId, text, position);
+            if (link is null)
+            {
+                ProcessAetheryteMapIconClick(placeNameSubtextId);
+            }
+            ProcessMapMarkerClick(placeNameSubtextId, text, position, link);
             if(configuration.DrawDebugSquares)
             {
                 ImGui.SetCursorPos(p);
@@ -705,7 +720,7 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void DrawMapLabelOnly(Vector2 position, string text)
+    private void DrawMapLabelOnly(Vector2 position, string text, MapMarkerLink? link)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -715,6 +730,7 @@ public class MapWindow : Window, IDisposable
         var p = (position * Scale) + DrawPosition;
         ImGui.SetCursorPos(p);
         ImGui.TextColored(configuration.TextColor, text);
+        ProcessMapMarkerClick(0, text, position, link);
     }
 
     public static bool IsRegionIcon(int iconId) =>
@@ -886,17 +902,62 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void ProcessMapMarkerClick(uint placeNameSubtextId, string text, Vector2 mapPosition)
+    private void ProcessMapMarkerClick(uint placeNameSubtextId, string text, Vector2 mapPosition, MapMarkerLink? link)
     {
         if (!IsMouseInsideMapCanvas() || !ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             return;
         }
 
-        AddClickedMapElement("MapMarker", placeNameSubtextId, string.IsNullOrWhiteSpace(text) ? "Map marker" : text, GetWorldPositionForMapCoordinate(mapPosition));
+        AddClickedMapElement("MapMarker", placeNameSubtextId, string.IsNullOrWhiteSpace(text) ? link?.Name ?? "Map marker" : text, GetWorldPositionForMapCoordinate(mapPosition), link);
         AddNearbyMapElementsToSelection();
         AddNearbyOtherPlayersToSelection();
         ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+    }
+
+    private MapMarkerLink? GetMapMarkerLink(Lumina.Excel.Sheets.MapMarker marker)
+    {
+        if (marker.DataKey.RowId == 0 || marker.DataType is not (1 or 2))
+        {
+            return null;
+        }
+
+        if (!dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>(clientState.ClientLanguage).TryGetRow(marker.DataKey.RowId, out var linkedMap))
+        {
+            return null;
+        }
+
+        if (linkedMap.TerritoryType.RowId == 0)
+        {
+            return null;
+        }
+
+        var name = marker.PlaceNameSubtext.ValueNullable?.Name.ToString();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = linkedMap.PlaceName.ValueNullable?.Name.ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = $"Map #{linkedMap.RowId}";
+        }
+
+        return new MapMarkerLink(linkedMap.RowId, linkedMap.TerritoryType.RowId, name);
+    }
+
+    private unsafe void OpenLinkedMap(MapMarkerLink link)
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null)
+        {
+            return;
+        }
+
+        keepPlayerCenteredPaused = true;
+        pendingFlagFocus = false;
+        currentPath = string.Empty;
+        agentMap->OpenMap(link.MapId, link.TerritoryId, link.Name, FFXIVClientStructs.FFXIV.Client.UI.Agent.MapType.Centered);
     }
 
     private static unsafe void TeleportToAetheryte(ClickedAetheryte aetheryte)
@@ -1649,9 +1710,9 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void AddClickedMapElement(string type, uint rowId, string name, Vector3 position)
+    private void AddClickedMapElement(string type, uint rowId, string name, Vector3 position, MapMarkerLink? link = null)
     {
-        var element = new ClickedMapElement(type, rowId, name, position);
+        var element = new ClickedMapElement(type, rowId, name, position, link);
         if (!clickedMapElements.Contains(element))
         {
             clickedMapElements.Add(element);
