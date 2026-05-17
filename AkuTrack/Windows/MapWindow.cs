@@ -76,6 +76,9 @@ public class MapWindow : Window, IDisposable
     private string currentPath = string.Empty;
     private uint currentMap = 0;
     private uint currentTerritory = 0;
+    private string currentWindowTitle = "AkuTrack - Map##akutrack_map";
+    private uint linkedMapPathTarget;
+    private string linkedMapParentPath = string.Empty;
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
     private Vector2 currentMapScreenPosition = new(0, 0);
@@ -191,6 +194,8 @@ public class MapWindow : Window, IDisposable
 
     public unsafe override void Draw()
     {
+        UpdateWindowTitle();
+
         if (configuration.KeepPlayerCentered && !keepPlayerCenteredPaused && currentMap == clientState.MapId)
         {
             CenterOnLocalPlayer();
@@ -223,6 +228,94 @@ public class MapWindow : Window, IDisposable
             HoveredFlags |= HoverFlags.WindowInnerFrame;
         }
         ProcessInputs();
+    }
+
+    private unsafe void UpdateWindowTitle()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null)
+        {
+            return;
+        }
+
+        var selectedMapId = agentMap->SelectedMapId;
+        if (linkedMapPathTarget != 0 && linkedMapPathTarget != selectedMapId)
+        {
+            linkedMapPathTarget = 0;
+            linkedMapParentPath = string.Empty;
+        }
+
+        var mapPath = GetMapDisplayPath(selectedMapId);
+        if (linkedMapPathTarget == selectedMapId && !string.IsNullOrWhiteSpace(linkedMapParentPath))
+        {
+            mapPath = CombineMapPath(linkedMapParentPath, GetMapDisplayPath(selectedMapId, false));
+        }
+
+        var visibleTitle = $"AkuTrack - Map - {mapPath}";
+        var windowTitle = $"{visibleTitle}##akutrack_map";
+
+        if (currentWindowTitle == windowTitle)
+        {
+            return;
+        }
+
+        currentWindowTitle = windowTitle;
+        WindowName = windowTitle;
+    }
+
+    private string GetMapDisplayPath(uint mapId, bool includeRegion = true)
+    {
+        if (mapId == 0 || !dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>(clientState.ClientLanguage).TryGetRow(mapId, out var map))
+        {
+            return "Unknown";
+        }
+
+        var parts = new List<string>();
+        if (includeRegion)
+        {
+            AddMapPathPart(parts, map.PlaceNameRegion.ValueNullable?.Name.ToString());
+        }
+
+        AddMapPathPart(parts, map.PlaceName.ValueNullable?.Name.ToString());
+        AddMapPathPart(parts, map.PlaceNameSub.ValueNullable?.Name.ToString());
+        return parts.Count == 0 ? $"Map #{mapId}" : string.Join(" > ", parts);
+    }
+
+    private static string CombineMapPath(string parentPath, string childPath)
+    {
+        if (string.IsNullOrWhiteSpace(parentPath))
+        {
+            return childPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(childPath) || childPath == "Unknown")
+        {
+            return parentPath;
+        }
+
+        var parts = parentPath.Split(" > ", StringSplitOptions.RemoveEmptyEntries).Select(part => part.Trim()).ToList();
+        foreach (var childPart in childPath.Split(" > ", StringSplitOptions.RemoveEmptyEntries).Select(part => part.Trim()))
+        {
+            AddMapPathPart(parts, childPart);
+        }
+
+        return string.Join(" > ", parts);
+    }
+
+    private static void AddMapPathPart(List<string> parts, string? part)
+    {
+        if (string.IsNullOrWhiteSpace(part))
+        {
+            return;
+        }
+
+        var trimmed = part.Trim();
+        if (parts.Any(existing => string.Equals(existing, trimmed, StringComparison.CurrentCultureIgnoreCase)))
+        {
+            return;
+        }
+
+        parts.Add(trimmed);
     }
 
     private void DrawMapElements() {
@@ -1209,6 +1302,8 @@ public class MapWindow : Window, IDisposable
 
         keepPlayerCenteredPaused = true;
         pendingFlagFocus = false;
+        linkedMapPathTarget = link.MapId;
+        linkedMapParentPath = GetMapDisplayPath(currentMap);
         currentPath = string.Empty;
         agentMap->OpenMap(link.MapId, link.TerritoryId, link.Name, FFXIVClientStructs.FFXIV.Client.UI.Agent.MapType.Centered);
     }
