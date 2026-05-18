@@ -274,7 +274,7 @@ public class MapWindow : Window, IDisposable
             linkedMapParentPath = string.Empty;
         }
 
-        var visibleTitle = $"AkuTrack - Map - {GetCurrentMapDisplayPath(selectedMapId)}";
+        var visibleTitle = "AkuTrack - Map";
         var windowTitle = $"{visibleTitle}##akutrack_map";
 
         if (currentWindowTitle == windowTitle)
