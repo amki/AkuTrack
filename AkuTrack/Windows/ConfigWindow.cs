@@ -56,68 +56,127 @@ public class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
-        DrawSection("Appearance and debug", configuration.ConfigAppearanceDebugOpen, value => configuration.ConfigAppearanceDebugOpen = value, () =>
+        if (!ImGui.BeginTabBar("akutrack_config_tabs"))
         {
-            DrawCheckbox("Draw debug squares", configuration.DrawDebugSquares, value => configuration.DrawDebugSquares = value);
+            return;
+        }
 
-            //ImGui.ColorEdit4("EINEFARBE##1", (float*)&color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | base_flags);
+        if (ImGui.BeginTabItem("Map"))
+        {
+            DrawMapBehaviorSettings();
+            ImGui.EndTabItem();
+        }
 
-            ImGui.TextUnformatted("Map text color");
-            ImGui.SameLine();
-            var textColor = configuration.TextColor;
-            if (ImGui.ColorEdit4("##map_text_color", ref textColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel | ImGuiColorEditFlags.DefaultOptions))
+        if (ImGui.BeginTabItem("Players"))
+        {
+            DrawPlayerSettings();
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("World"))
+        {
+            DrawWorldContentSettings(MapContentScope.World);
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Content Finder"))
+        {
+            DrawWorldContentSettings(MapContentScope.ContentFinder);
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Appearance"))
+        {
+            DrawAppearanceSettings();
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
+    }
+
+    private void DrawMapBehaviorSettings()
+    {
+        DrawCheckbox("Center on player when opening", configuration.CenterOnPlayerWhenOpening, value => configuration.CenterOnPlayerWhenOpening = value);
+        DrawCheckbox("Fully replace game map", configuration.ReplaceGameMap, value =>
+        {
+            configuration.ReplaceGameMap = value;
+            if (value)
             {
-                log.Debug($"Set TextColor to {textColor}");
-                configuration.TextColor = textColor;
-                configuration.Save();
+                configuration.ToggleMapWithGameMap = false;
             }
         });
+        DrawGameMapModifierCombo();
+        DrawCheckbox("Keep player centered until manual pan", configuration.KeepPlayerCentered, value => configuration.KeepPlayerCentered = value);
+        ImGui.BeginDisabled(configuration.ReplaceGameMap);
+        DrawCheckbox("Sync with game map (M)", configuration.ToggleMapWithGameMap, value => configuration.ToggleMapWithGameMap = value);
+        ImGui.EndDisabled();
+    }
 
-        DrawSection("Map behavior", configuration.ConfigMapBehaviorOpen, value => configuration.ConfigMapBehaviorOpen = value, () =>
+    private void DrawPlayerSettings()
+    {
+        DrawCheckbox("Color player markers by class", configuration.ColorPlayerMarkersByClass, value => configuration.ColorPlayerMarkersByClass = value);
+        DrawCheckbox("Show camera cone", configuration.DrawCameraCone, value => configuration.DrawCameraCone = value);
+        DrawCheckbox("Show other players", configuration.DrawOtherPlayers, value => configuration.DrawOtherPlayers = value);
+        DrawCheckbox("Show party members", configuration.DrawPartyMembers, value => configuration.DrawPartyMembers = value);
+    }
+
+    private void DrawWorldContentSettings(MapContentScope scope)
+    {
+        DrawSourceMasterToggles(scope);
+        ImGui.Separator();
+
+        DrawObjectCategorySettings(scope, "BattleNpc", "Show battle NPCs", GetContentToggle(scope, "BattleNpc"), value => SetContentToggle(scope, "BattleNpc", value));
+        DrawCheckbox("Show critical engagements", GetContentToggle(scope, "CriticalEngagements"), value => SetContentToggle(scope, "CriticalEngagements", value));
+        DrawObjectCategorySettings(scope, "EventNpc", "Show event NPCs", GetContentToggle(scope, "EventNpc"), value => SetContentToggle(scope, "EventNpc", value));
+        DrawObjectCategoryWithSources(scope, "EventObj", "Show event objects", GetEventObjIconOptions());
+        DrawCheckbox("Show FATEs", GetContentToggle(scope, "FATE"), value => SetContentToggle(scope, "FATE", value));
+        DrawObjectCategoryWithSources(scope, "Fishingspot", "Show fishing spots", GetFishingSpotIconOptions());
+        DrawObjectCategoryWithSources(scope, "GatheringPoint", "Show gathering points", GetGatheringPointIconOptions());
+        DrawCheckbox("Show housing map markers", GetContentToggle(scope, "HousingMapMarkerInfo"), value => SetContentToggle(scope, "HousingMapMarkerInfo", value));
+        DrawCheckbox("Show map markers with icons and labels", GetContentToggle(scope, "MapMarkersWithIcons"), value => SetContentToggle(scope, "MapMarkersWithIcons", value));
+        DrawCheckbox("Show map markers with labels only", GetContentToggle(scope, "MapMarkerLabelsOnly"), value => SetContentToggle(scope, "MapMarkerLabelsOnly", value));
+        DrawObjectCategoryWithSources(scope, "Quest", "Show quest markers", GetQuestIconOptions());
+        DrawCheckbox("Show remote markers", GetContentToggle(scope, "RemoteMarker"), value => SetContentToggle(scope, "RemoteMarker", value));
+        DrawCheckbox("Show sightseeing log entries", GetContentToggle(scope, "SightseeingLog"), value => SetContentToggle(scope, "SightseeingLog", value));
+        DrawObjectCategoryWithSources(scope, "SpearfishingNotebook", "Show spearfishing spots", GetSpearfishingSpotIconOptions());
+        DrawObjectCategorySettings(scope, "Treasure", "Show treasure", GetContentToggle(scope, "Treasure"), value => SetContentToggle(scope, "Treasure", value));
+        DrawTreasureMapSettings(scope);
+    }
+
+    private void DrawSourceMasterToggles(MapContentScope scope)
+    {
+        DrawSourceMasterToggle(scope, MapObjectSource.Downloaded, "Downloaded entries");
+        ImGui.SameLine();
+        DrawSourceMasterToggle(scope, MapObjectSource.SelfFound, "Self-found entries");
+    }
+
+    private void DrawSourceMasterToggle(MapContentScope scope, MapObjectSource source, string label)
+    {
+        var enabled = SourceToggleCategories.All(category => configuration.IsObjectSourceEnabled(scope, category, source));
+        if (ImGui.Checkbox($"{label}##{scope}_{source}_all", ref enabled))
         {
-            DrawCheckbox("Center on player when opening", configuration.CenterOnPlayerWhenOpening, value => configuration.CenterOnPlayerWhenOpening = value);
-            DrawCheckbox("Fully replace game map", configuration.ReplaceGameMap, value =>
+            foreach (var category in SourceToggleCategories)
             {
-                configuration.ReplaceGameMap = value;
-                if (value)
-                {
-                    configuration.ToggleMapWithGameMap = false;
-                }
-            });
-            DrawGameMapModifierCombo();
-            DrawCheckbox("Keep player centered until manual pan", configuration.KeepPlayerCentered, value => configuration.KeepPlayerCentered = value);
-            ImGui.BeginDisabled(configuration.ReplaceGameMap);
-            DrawCheckbox("Sync with game map (M)", configuration.ToggleMapWithGameMap, value => configuration.ToggleMapWithGameMap = value);
-            ImGui.EndDisabled();
-        });
+                configuration.SetObjectSourceEnabled(scope, category, source, enabled);
+            }
 
-        DrawSection("Players", configuration.ConfigPlayersOpen, value => configuration.ConfigPlayersOpen = value, () =>
-        {
-            DrawCheckbox("Color player markers by class", configuration.ColorPlayerMarkersByClass, value => configuration.ColorPlayerMarkersByClass = value);
-            DrawCheckbox("Show camera cone", configuration.DrawCameraCone, value => configuration.DrawCameraCone = value);
-            DrawCheckbox("Show other players", configuration.DrawOtherPlayers, value => configuration.DrawOtherPlayers = value);
-            DrawCheckbox("Show party members", configuration.DrawPartyMembers, value => configuration.DrawPartyMembers = value);
-        });
+            configuration.Save();
+        }
+    }
 
-        DrawSection("World content", configuration.ConfigWorldContentOpen, value => configuration.ConfigWorldContentOpen = value, () =>
+    private void DrawAppearanceSettings()
+    {
+        DrawCheckbox("Draw debug squares", configuration.DrawDebugSquares, value => configuration.DrawDebugSquares = value);
+
+        ImGui.TextUnformatted("Map text color");
+        ImGui.SameLine();
+        var textColor = configuration.TextColor;
+        if (ImGui.ColorEdit4("##map_text_color", ref textColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel | ImGuiColorEditFlags.DefaultOptions))
         {
-            DrawCheckbox("Show battle NPCs", configuration.DrawBNpc, value => configuration.DrawBNpc = value);
-            DrawCheckbox("Show critical engagements", configuration.DrawCriticalEngagements, value => configuration.DrawCriticalEngagements = value);
-            DrawCheckbox("Show event NPCs", configuration.DrawENpc, value => configuration.DrawENpc = value);
-            DrawIconCategorySettings("EventObj", "Show event objects", GetEventObjIconOptions());
-            DrawCheckbox("Show FATEs", configuration.DrawFates, value => configuration.DrawFates = value);
-            DrawIconCategorySettings("Fishingspot", "Show fishing spots", GetFishingSpotIconOptions());
-            DrawIconCategorySettings("GatheringPoint", "Show gathering points", GetGatheringPointIconOptions());
-            DrawCheckbox("Show housing map markers", configuration.DrawHousingMapMarkers, value => configuration.DrawHousingMapMarkers = value);
-            DrawCheckbox("Show map markers with icons and labels", configuration.DrawMapMarkersWithIcons, value => configuration.DrawMapMarkersWithIcons = value);
-            DrawCheckbox("Show map markers with labels only", configuration.DrawMapMarkerLabelsOnly, value => configuration.DrawMapMarkerLabelsOnly = value);
-            DrawIconCategorySettings("Quest", "Show quest markers", GetQuestIconOptions());
-            DrawCheckbox("Show remote markers", configuration.DrawRemoteMarker, value => configuration.DrawRemoteMarker = value);
-            DrawCheckbox("Show sightseeing log entries", configuration.DrawSightseeingLogEntries, value => configuration.DrawSightseeingLogEntries = value);
-            DrawIconCategorySettings("SpearfishingNotebook", "Show spearfishing spots", GetSpearfishingSpotIconOptions());
-            DrawCheckbox("Show treasure", configuration.DrawTreasure, value => configuration.DrawTreasure = value);
-            DrawTreasureMapSettings();
-        });
+            log.Debug($"Set TextColor to {textColor}");
+            configuration.TextColor = textColor;
+            configuration.Save();
+        }
     }
 
     private void DrawSection(string label, bool currentOpen, Action<bool> setOpen, Action drawContents)
@@ -138,7 +197,82 @@ public class ConfigWindow : Window, IDisposable
         }
     }
 
-    private void DrawTreasureMapSettings()
+    private bool GetContentToggle(MapContentScope scope, string category)
+    {
+        return scope switch
+        {
+            MapContentScope.World => category switch
+            {
+                "BattleNpc" => configuration.DrawBNpc,
+                "CriticalEngagements" => configuration.DrawCriticalEngagements,
+                "EventNpc" => configuration.DrawENpc,
+                "FATE" => configuration.DrawFates,
+                "HousingMapMarkerInfo" => configuration.DrawHousingMapMarkers,
+                "MapMarkerLabelsOnly" => configuration.DrawMapMarkerLabelsOnly,
+                "MapMarkersWithIcons" => configuration.DrawMapMarkersWithIcons,
+                "RemoteMarker" => configuration.DrawRemoteMarker,
+                "SightseeingLog" => configuration.DrawSightseeingLogEntries,
+                "Treasure" => configuration.DrawTreasure,
+                "TreasureMaps" => configuration.DrawTreasureMaps,
+                _ => true,
+            },
+            MapContentScope.ContentFinder => category switch
+            {
+                "BattleNpc" => configuration.DrawContentFinderBNpc,
+                "CriticalEngagements" => configuration.DrawContentFinderCriticalEngagements,
+                "EventNpc" => configuration.DrawContentFinderENpc,
+                "FATE" => configuration.DrawContentFinderFates,
+                "HousingMapMarkerInfo" => configuration.DrawContentFinderHousingMapMarkers,
+                "MapMarkerLabelsOnly" => configuration.DrawContentFinderMapMarkerLabelsOnly,
+                "MapMarkersWithIcons" => configuration.DrawContentFinderMapMarkersWithIcons,
+                "RemoteMarker" => configuration.DrawContentFinderRemoteMarker,
+                "SightseeingLog" => configuration.DrawContentFinderSightseeingLogEntries,
+                "Treasure" => configuration.DrawContentFinderTreasure,
+                "TreasureMaps" => configuration.DrawContentFinderTreasureMaps,
+                _ => true,
+            },
+            _ => true,
+        };
+    }
+
+    private void SetContentToggle(MapContentScope scope, string category, bool value)
+    {
+        if (scope == MapContentScope.World)
+        {
+            switch (category)
+            {
+                case "BattleNpc": configuration.DrawBNpc = value; break;
+                case "CriticalEngagements": configuration.DrawCriticalEngagements = value; break;
+                case "EventNpc": configuration.DrawENpc = value; break;
+                case "FATE": configuration.DrawFates = value; break;
+                case "HousingMapMarkerInfo": configuration.DrawHousingMapMarkers = value; break;
+                case "MapMarkerLabelsOnly": configuration.DrawMapMarkerLabelsOnly = value; break;
+                case "MapMarkersWithIcons": configuration.DrawMapMarkersWithIcons = value; break;
+                case "RemoteMarker": configuration.DrawRemoteMarker = value; break;
+                case "SightseeingLog": configuration.DrawSightseeingLogEntries = value; break;
+                case "Treasure": configuration.DrawTreasure = value; break;
+                case "TreasureMaps": configuration.DrawTreasureMaps = value; break;
+            }
+            return;
+        }
+
+        switch (category)
+        {
+            case "BattleNpc": configuration.DrawContentFinderBNpc = value; break;
+            case "CriticalEngagements": configuration.DrawContentFinderCriticalEngagements = value; break;
+            case "EventNpc": configuration.DrawContentFinderENpc = value; break;
+            case "FATE": configuration.DrawContentFinderFates = value; break;
+            case "HousingMapMarkerInfo": configuration.DrawContentFinderHousingMapMarkers = value; break;
+            case "MapMarkerLabelsOnly": configuration.DrawContentFinderMapMarkerLabelsOnly = value; break;
+            case "MapMarkersWithIcons": configuration.DrawContentFinderMapMarkersWithIcons = value; break;
+            case "RemoteMarker": configuration.DrawContentFinderRemoteMarker = value; break;
+            case "SightseeingLog": configuration.DrawContentFinderSightseeingLogEntries = value; break;
+            case "Treasure": configuration.DrawContentFinderTreasure = value; break;
+            case "TreasureMaps": configuration.DrawContentFinderTreasureMaps = value; break;
+        }
+    }
+
+    private void DrawTreasureMapSettings(MapContentScope scope)
     {
         var ranks = GetTreasureMapRanks().OrderBy(rank => rank.Name).ToList();
         if (ranks.Count <= 0)
@@ -147,12 +281,14 @@ public class ConfigWindow : Window, IDisposable
             return;
         }
 
-        var open = configuration.IsIconCategoryOpen("TreasureMaps");
+        DrawCheckbox("Show treasure map spots", GetContentToggle(scope, "TreasureMaps"), value => SetContentToggle(scope, "TreasureMaps", value));
+
+        var open = configuration.IsIconCategoryOpen($"{scope}:TreasureMaps");
         ImGui.SetNextItemOpen(open, ImGuiCond.Once);
-        var nextOpen = ImGui.TreeNode("Show treasure map spots##TreasureMaps_types");
+        var nextOpen = ImGui.TreeNode($"Treasure map types##{scope}_TreasureMaps_types");
         if (nextOpen != open)
         {
-            configuration.SetIconCategoryOpen("TreasureMaps", nextOpen);
+            configuration.SetIconCategoryOpen($"{scope}:TreasureMaps", nextOpen);
             configuration.Save();
         }
 
@@ -181,6 +317,68 @@ public class ConfigWindow : Window, IDisposable
         ImGui.TreePop();
     }
 
+    private void DrawObjectCategorySettings(MapContentScope scope, string category, string label, bool currentValue, Action<bool> setValue)
+    {
+        DrawCheckbox(label, currentValue, setValue);
+        DrawSourceToggles(scope, category);
+    }
+
+    private void DrawObjectCategoryWithSources(MapContentScope scope, string category, string label, IEnumerable<IconCategoryOption> optionsSource)
+    {
+        DrawIconCategorySettings(scope, category, label, optionsSource);
+        DrawSourceToggles(scope, category);
+    }
+
+    private void DrawSourceToggles(MapContentScope scope, string category)
+    {
+        ImGui.Indent();
+        DrawCheckbox($"Downloaded entries##{scope}_{category}_downloaded", configuration.IsObjectSourceEnabled(scope, category, MapObjectSource.Downloaded), value => configuration.SetObjectSourceEnabled(scope, category, MapObjectSource.Downloaded, value));
+        ImGui.SameLine();
+        DrawCheckbox($"Self-found entries##{scope}_{category}_selffound", configuration.IsObjectSourceEnabled(scope, category, MapObjectSource.SelfFound), value => configuration.SetObjectSourceEnabled(scope, category, MapObjectSource.SelfFound, value));
+        ImGui.Unindent();
+    }
+
+    private void DrawContentFinderConditionSettings()
+    {
+        DrawCheckbox("Show content finder map markers", configuration.DrawContentFinderConditionMarkers, value => configuration.DrawContentFinderConditionMarkers = value);
+        ImGui.Separator();
+
+        var types = GetContentFinderConditionTypes().OrderBy(type => type.Name).ToList();
+        if (types.Count <= 0)
+        {
+            ImGui.TextDisabled("No content finder condition types found.");
+            return;
+        }
+
+        var allChecked = types.All(type => configuration.IsContentFinderConditionTypeEnabled(type.Id));
+        if (ImGui.Checkbox("All##content_finder_all", ref allChecked))
+        {
+            foreach (var type in types)
+            {
+                configuration.SetContentFinderConditionTypeEnabled(type.Id, allChecked);
+            }
+            configuration.Save();
+        }
+
+        foreach (var type in types)
+        {
+            DrawCheckbox($"{type.Name}##content_finder_{type.Id}", configuration.IsContentFinderConditionTypeEnabled(type.Id), value => configuration.SetContentFinderConditionTypeEnabled(type.Id, value));
+        }
+    }
+
+    private IEnumerable<ContentFinderConditionTypeConfigInfo> GetContentFinderConditionTypes()
+    {
+        return dataManager.GetExcelSheet<Lumina.Excel.Sheets.ContentFinderCondition>()
+            .Where(row => row.RowId != 0 && row.ContentType.IsValid)
+            .Select(row =>
+            {
+                var contentType = row.ContentType.Value;
+                var label = contentType.Name.ToString();
+                return new ContentFinderConditionTypeConfigInfo(contentType.RowId, string.IsNullOrWhiteSpace(label) ? $"Type {contentType.RowId}" : label);
+            })
+            .DistinctBy(type => type.Id);
+    }
+
     private IEnumerable<TreasureMapRankConfigInfo> GetTreasureMapRanks()
     {
         var spots = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.TreasureSpot>();
@@ -201,24 +399,25 @@ public class ConfigWindow : Window, IDisposable
         }
     }
 
-    private void DrawIconCategorySettings(string category, string label, IEnumerable<IconCategoryOption> optionsSource)
+    private void DrawIconCategorySettings(MapContentScope scope, string category, string label, IEnumerable<IconCategoryOption> optionsSource)
     {
         var options = optionsSource.OrderBy(option => option.IconId).ThenBy(option => option.Label).ToList();
         if (options.Count <= 1)
         {
             foreach (var option in options)
             {
-                DrawCheckbox(label, configuration.IsIconCategoryEntryEnabled(category, option.IconId), value => configuration.SetIconCategoryEntryEnabled(category, option.IconId, value));
+                DrawCheckbox(label, configuration.IsIconCategoryEntryEnabled(scope, category, option.IconId), value => configuration.SetIconCategoryEntryEnabled(scope, category, option.IconId, value));
             }
             return;
         }
 
-        var open = configuration.IsIconCategoryOpen(category);
+        var scopedCategory = $"{scope}:{category}";
+        var open = configuration.IsIconCategoryOpen(scopedCategory);
         ImGui.SetNextItemOpen(open, ImGuiCond.Once);
-        var nextOpen = ImGui.TreeNode($"{label}##{category}_icon_types");
+        var nextOpen = ImGui.TreeNode($"{label}##{scope}_{category}_icon_types");
         if (nextOpen != open)
         {
-            configuration.SetIconCategoryOpen(category, nextOpen);
+            configuration.SetIconCategoryOpen(scopedCategory, nextOpen);
             configuration.Save();
         }
 
@@ -228,19 +427,19 @@ public class ConfigWindow : Window, IDisposable
         }
 
         ImGui.Indent();
-        var allChecked = options.All(option => configuration.IsIconCategoryEntryEnabled(category, option.IconId));
-        if (ImGui.Checkbox($"All##{category}_all", ref allChecked))
+        var allChecked = options.All(option => configuration.IsIconCategoryEntryEnabled(scope, category, option.IconId));
+        if (ImGui.Checkbox($"All##{scope}_{category}_all", ref allChecked))
         {
             foreach (var option in options)
             {
-                configuration.SetIconCategoryEntryEnabled(category, option.IconId, allChecked);
+                configuration.SetIconCategoryEntryEnabled(scope, category, option.IconId, allChecked);
             }
             configuration.Save();
         }
 
         foreach (var option in options)
         {
-            DrawCheckbox($"{option.Label} ({option.IconId:000000})##{category}_{option.IconId}", configuration.IsIconCategoryEntryEnabled(category, option.IconId), value => configuration.SetIconCategoryEntryEnabled(category, option.IconId, value));
+            DrawCheckbox($"{option.Label} ({option.IconId:000000})##{scope}_{category}_{option.IconId}", configuration.IsIconCategoryEntryEnabled(scope, category, option.IconId), value => configuration.SetIconCategoryEntryEnabled(scope, category, option.IconId, value));
         }
 
         ImGui.Unindent();
@@ -396,6 +595,19 @@ public class ConfigWindow : Window, IDisposable
 
     private readonly record struct TreasureMapRankConfigInfo(uint Id, string Name);
     private readonly record struct IconCategoryOption(uint IconId, string Label);
+    private readonly record struct ContentFinderConditionTypeConfigInfo(uint Id, string Name);
+
+    private static readonly string[] SourceToggleCategories =
+    [
+        "BattleNpc",
+        "EventNpc",
+        "EventObj",
+        "Fishingspot",
+        "GatheringPoint",
+        "Quest",
+        "SpearfishingNotebook",
+        "Treasure",
+    ];
 
     private static readonly GameMapOpenModifier[] GameMapModifiers =
     [

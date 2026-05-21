@@ -96,6 +96,9 @@ public class MapWindow : Window, IDisposable
     private List<LocalMapCategoryMarker> localCategoryMarkerCache = new();
     private Dictionary<uint, List<MapMarkerLink>>? fallbackMapLinksByPlaceName;
     private Dictionary<string, List<MapMarkerLink>>? fallbackMapLinksByName;
+    private Dictionary<uint, uint>? contentFinderTypeByPlaceName;
+    private Dictionary<string, uint>? contentFinderTypeByName;
+    private HashSet<uint>? contentFinderMapIds;
     private Dictionary<string, List<MapMarkerLink>>? territoryMapLinksByName;
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
@@ -381,6 +384,7 @@ public class MapWindow : Window, IDisposable
         ProcessPendingFlagFocus();
 
         var drawPlayerMarkersInBackground = ImGui.GetIO().KeyCtrl;
+        var contentScope = GetCurrentContentScope();
 
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
         if (currentMap == clientState.MapId)
@@ -393,14 +397,14 @@ public class MapWindow : Window, IDisposable
             DrawOtherPlayerIcons();
             foreach (var o in objTrackManager.seenList)
             {
-                DrawAkuGameObject(o.Value);
+                DrawAkuGameObject(o.Value, MapObjectSource.SelfFound, contentScope);
             }
         }
-        if(configuration.DrawRemoteMarker) {
+        if(ShouldDrawContent("RemoteMarker", contentScope)) {
             foreach (var o in downloadList)
             {
                 if (!objTrackManager.seenList.ContainsKey(o.Key))
-                    DrawAkuGameObject(o.Value);
+                    DrawAkuGameObject(o.Value, MapObjectSource.Downloaded, contentScope);
             }
         }
 
@@ -426,7 +430,7 @@ public class MapWindow : Window, IDisposable
 
                 if (row.Icon == 0)
                 {
-                    if (configuration.DrawMapMarkerLabelsOnly)
+                    if (ShouldDrawContent("MapMarkerLabelsOnly", contentScope))
                     {
                         DrawMapLabelOnly(pos, text, links);
                     }
@@ -434,7 +438,7 @@ public class MapWindow : Window, IDisposable
                     continue;
                 }
 
-                if (configuration.DrawMapMarkersWithIcons)
+                if (ShouldDrawContent("MapMarkersWithIcons", contentScope))
                 {
                     DrawMapIcon(row.Icon, pos, 3.14f, text, row.SubtextOrientation, row.PlaceNameSubtext.RowId, links);
                 }
@@ -590,22 +594,26 @@ public class MapWindow : Window, IDisposable
         return dataManager.GetFile<TexFile>(path);
     }
 
-    private void DrawAkuGameObject(AkuGameObject obj) {
+    private void DrawAkuGameObject(AkuGameObject obj, MapObjectSource source, MapContentScope scope) {
         if (obj.mid != currentMap)
             return;
         if (!MatchesMapSearch(obj.t, obj.name, obj.bid.ToString(), obj.nid?.ToString(), obj.npiid?.ToString()))
             return;
         if (obj.t == "EventNpc")
         {
-            if (!configuration.DrawENpc)
+            if (!configuration.IsObjectSourceEnabled(scope, "EventNpc", source))
+                return;
+            if (!ShouldDrawContent("EventNpc", scope))
                 return;
             // check if we need special icons for ENPCs currently implemented for TrippleTriad
             DrawIcon(enpcShopResolver.GetPreferredMapIconId(obj.bid), obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "EventObj")
         {
+            if (!configuration.IsObjectSourceEnabled(scope, "EventObj", source))
+                return;
             var iconId = GetEventObjIconId(obj.bid);
-            if (!configuration.IsIconCategoryEntryEnabled("EventObj", iconId))
+            if (!configuration.IsIconCategoryEntryEnabled(scope, "EventObj", iconId))
                 return;
             if (iconId == 60033)
                 DrawIcon((int)iconId, obj.pos, obj.r, obj.tint, new Vector2(22.0f * ImGuiHelpers.GlobalScale));
@@ -614,7 +622,9 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "BattleNpc")
         {
-            if (!configuration.DrawBNpc)
+            if (!configuration.IsObjectSourceEnabled(scope, "BattleNpc", source))
+                return;
+            if (!ShouldDrawContent("BattleNpc", scope))
                 return;
             DrawIcon(60422, obj.pos, obj.r, obj.tint);
         }
@@ -630,58 +640,68 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "GatheringPoint")
         {
+            if (!configuration.IsObjectSourceEnabled(scope, "GatheringPoint", source))
+                return;
             if (!dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().TryGetRow(obj.bid, out var gatheringPointRow))
             {
                 log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");
                 return;
             }
             var iconId = GetGatheringPointIconId(gatheringPointRow);
-            if (!configuration.IsIconCategoryEntryEnabled("GatheringPoint", iconId))
+            if (!configuration.IsIconCategoryEntryEnabled(scope, "GatheringPoint", iconId))
                 return;
             DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "Treasure")
         {
-            if (!configuration.DrawTreasure)
+            if (!configuration.IsObjectSourceEnabled(scope, "Treasure", source))
+                return;
+            if (!ShouldDrawContent("Treasure", scope))
                 return;
             DrawIcon(60354, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "Fishingspot")
         {
+            if (!configuration.IsObjectSourceEnabled(scope, "Fishingspot", source))
+                return;
             var iconId = GetFishingSpotIconId(obj.bid);
-            if (!configuration.IsIconCategoryEntryEnabled("Fishingspot", iconId))
+            if (!configuration.IsIconCategoryEntryEnabled(scope, "Fishingspot", iconId))
                 return;
             DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "SpearfishingNotebook")
         {
+            if (!configuration.IsObjectSourceEnabled(scope, "SpearfishingNotebook", source))
+                return;
             var iconId = GetSpearfishingSpotIconId(obj.bid);
-            if (!configuration.IsIconCategoryEntryEnabled("SpearfishingNotebook", iconId))
+            if (!configuration.IsIconCategoryEntryEnabled(scope, "SpearfishingNotebook", iconId))
                 return;
             DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "Quest")
         {
+            if (!configuration.IsObjectSourceEnabled(scope, "Quest", source))
+                return;
             var iconId = GetDownloadedQuestMapIconId(obj.bid);
-            if (!configuration.IsIconCategoryEntryEnabled("Quest", iconId))
+            if (!configuration.IsIconCategoryEntryEnabled(scope, "Quest", iconId))
                 return;
             DrawIcon((int)iconId, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "HousingMapMarkerInfo")
         {
-            if (!configuration.DrawHousingMapMarkers)
+            if (!ShouldDrawContent("HousingMapMarkerInfo", scope))
                 return;
             DrawIcon(60441, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "CEs")
         {
-            if (!configuration.DrawCriticalEngagements)
+            if (!ShouldDrawContent("CriticalEngagements", scope))
                 return;
             DrawIcon(60852, obj.pos, obj.r, obj.tint);
         }
         else if (obj.t == "FATE")
         {
-            if (!configuration.DrawFates)
+            if (!ShouldDrawContent("FATE", scope))
                 return;
             DrawIcon(60501, obj.pos, obj.r, obj.tint);
         }
@@ -720,6 +740,61 @@ public class MapWindow : Window, IDisposable
         var search = configuration.MapSearchFilterText.Trim();
         return values.Any(value => !string.IsNullOrWhiteSpace(value)
                                    && value.Contains(search, StringComparison.CurrentCultureIgnoreCase));
+    }
+
+    private MapContentScope GetCurrentContentScope() => IsContentFinderMap(currentMap) ? MapContentScope.ContentFinder : MapContentScope.World;
+
+    private bool IsContentFinderMap(uint mapId)
+    {
+        if (contentFinderMapIds is null)
+        {
+            contentFinderMapIds = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ContentFinderCondition>(clientState.ClientLanguage)
+                .Where(content => content.TerritoryType.IsValid
+                                  && content.TerritoryType.Value.Map.IsValid
+                                  && content.TerritoryType.Value.Map.RowId != 0)
+                .Select(content => content.TerritoryType.Value.Map.RowId)
+                .ToHashSet();
+        }
+
+        return contentFinderMapIds.Contains(mapId);
+    }
+
+    private bool ShouldDrawContent(string category, MapContentScope scope)
+    {
+        return scope switch
+        {
+            MapContentScope.World => category switch
+            {
+                "BattleNpc" => configuration.DrawBNpc,
+                "CriticalEngagements" => configuration.DrawCriticalEngagements,
+                "EventNpc" => configuration.DrawENpc,
+                "FATE" => configuration.DrawFates,
+                "HousingMapMarkerInfo" => configuration.DrawHousingMapMarkers,
+                "MapMarkerLabelsOnly" => configuration.DrawMapMarkerLabelsOnly,
+                "MapMarkersWithIcons" => configuration.DrawMapMarkersWithIcons,
+                "RemoteMarker" => configuration.DrawRemoteMarker,
+                "SightseeingLog" => configuration.DrawSightseeingLogEntries,
+                "Treasure" => configuration.DrawTreasure,
+                "TreasureMaps" => configuration.DrawTreasureMaps,
+                _ => true,
+            },
+            MapContentScope.ContentFinder => category switch
+            {
+                "BattleNpc" => configuration.DrawContentFinderBNpc,
+                "CriticalEngagements" => configuration.DrawContentFinderCriticalEngagements,
+                "EventNpc" => configuration.DrawContentFinderENpc,
+                "FATE" => configuration.DrawContentFinderFates,
+                "HousingMapMarkerInfo" => configuration.DrawContentFinderHousingMapMarkers,
+                "MapMarkerLabelsOnly" => configuration.DrawContentFinderMapMarkerLabelsOnly,
+                "MapMarkersWithIcons" => configuration.DrawContentFinderMapMarkersWithIcons,
+                "RemoteMarker" => configuration.DrawContentFinderRemoteMarker,
+                "SightseeingLog" => configuration.DrawContentFinderSightseeingLogEntries,
+                "Treasure" => configuration.DrawContentFinderTreasure,
+                "TreasureMaps" => configuration.DrawContentFinderTreasureMaps,
+                _ => true,
+            },
+            _ => true,
+        };
     }
 
     public void DrawAkuObjectContextMenu()
@@ -1185,6 +1260,8 @@ public class MapWindow : Window, IDisposable
 
         fallbackMapLinksByPlaceName = new Dictionary<uint, List<MapMarkerLink>>();
         fallbackMapLinksByName = new Dictionary<string, List<MapMarkerLink>>();
+        contentFinderTypeByPlaceName = new Dictionary<uint, uint>();
+        contentFinderTypeByName = new Dictionary<string, uint>();
         foreach (var content in dataManager.GetExcelSheet<Lumina.Excel.Sheets.ContentFinderCondition>(clientState.ClientLanguage))
         {
             if (!content.TerritoryType.IsValid || string.IsNullOrWhiteSpace(content.Name.ToString()))
@@ -1219,6 +1296,15 @@ public class MapWindow : Window, IDisposable
             AddMapLinkAlias(fallbackMapLinksByName!, linkName, link);
             AddMapLinkAlias(fallbackMapLinksByName!, territoryPlaceName, link);
             AddMapLinkAlias(fallbackMapLinksByName!, mapPlaceName, link);
+
+            if (content.ContentType.IsValid)
+            {
+                var contentTypeId = content.ContentType.RowId;
+                contentFinderTypeByPlaceName[territory.PlaceName.RowId] = contentTypeId;
+                AddContentFinderTypeAlias(linkName, contentTypeId);
+                AddContentFinderTypeAlias(territoryPlaceName, contentTypeId);
+                AddContentFinderTypeAlias(mapPlaceName, contentTypeId);
+            }
         }
 
         foreach (var links in fallbackMapLinksByPlaceName.Values)
@@ -1231,6 +1317,28 @@ public class MapWindow : Window, IDisposable
         }
 
         return fallbackMapLinksByPlaceName;
+    }
+
+    private uint? GetContentFinderConditionTypeId(Lumina.Excel.Sheets.MapMarker marker, string markerName)
+    {
+        if (!IsDutyMapMarkerIcon(marker.Icon))
+        {
+            return null;
+        }
+
+        GetFallbackMapLinksByPlaceName();
+        if (marker.PlaceNameSubtext.RowId != 0
+            && contentFinderTypeByPlaceName is not null
+            && contentFinderTypeByPlaceName.TryGetValue(marker.PlaceNameSubtext.RowId, out var contentTypeId))
+        {
+            return contentTypeId;
+        }
+
+        return !string.IsNullOrWhiteSpace(markerName)
+               && contentFinderTypeByName is not null
+               && contentFinderTypeByName.TryGetValue(NormalizeMapLinkName(markerName), out contentTypeId)
+            ? contentTypeId
+            : null;
     }
 
     private Dictionary<string, List<MapMarkerLink>> GetFallbackMapLinksByName()
@@ -1261,6 +1369,16 @@ public class MapWindow : Window, IDisposable
         {
             links.Add(link);
         }
+    }
+
+    private void AddContentFinderTypeAlias(string? name, uint contentTypeId)
+    {
+        if (string.IsNullOrWhiteSpace(name) || contentFinderTypeByName is null)
+        {
+            return;
+        }
+
+        contentFinderTypeByName[NormalizeMapLinkName(name)] = contentTypeId;
     }
 
     private IReadOnlyList<MapMarkerLink> GetObjectMapLinks(AkuGameObject obj)
@@ -1393,7 +1511,7 @@ public class MapWindow : Window, IDisposable
 
     private void DrawSightseeingLogMarkers()
     {
-        if (!configuration.DrawSightseeingLogEntries)
+        if (!ShouldDrawContent("SightseeingLog", GetCurrentContentScope()))
         {
             return;
         }
@@ -1459,6 +1577,11 @@ public class MapWindow : Window, IDisposable
 
     private void DrawTreasureMapSpots()
     {
+        if (!ShouldDrawContent("TreasureMaps", GetCurrentContentScope()))
+        {
+            return;
+        }
+
         foreach (var spot in GetTreasureMapSpotsForCurrentMap())
         {
             if (configuration.IsTreasureMapRankEnabled(spot.RankId)
@@ -1627,20 +1750,22 @@ public class MapWindow : Window, IDisposable
 
     private bool ShouldDrawLocalCategoryMarker(string category)
     {
+        var scope = GetCurrentContentScope();
         return category switch
         {
             "Fishingspot" => true,
             "SpearfishingNotebook" => true,
             "Quest" => true,
-            "HousingMapMarkerInfo" => configuration.DrawHousingMapMarkers,
+            "HousingMapMarkerInfo" => ShouldDrawContent("HousingMapMarkerInfo", scope),
             _ => false,
         };
     }
 
     private bool ShouldDrawLocalCategoryMarker(LocalMapCategoryMarker marker)
     {
+        var scope = GetCurrentContentScope();
         return ShouldDrawLocalCategoryMarker(marker.Category)
-               && configuration.IsIconCategoryEntryEnabled(marker.Category, marker.IconId)
+               && configuration.IsIconCategoryEntryEnabled(scope, marker.Category, marker.IconId)
                && MatchesMapSearch(marker.Category, GetLocalCategoryDisplayName(marker.Category), marker.Name, marker.RowId.ToString(), marker.IconId.ToString());
     }
 
@@ -1937,7 +2062,7 @@ public class MapWindow : Window, IDisposable
 
     private void DrawFateMarkers()
     {
-        if (!configuration.DrawFates)
+        if (!ShouldDrawContent("FATE", GetCurrentContentScope()))
         {
             return;
         }
@@ -2113,7 +2238,7 @@ public class MapWindow : Window, IDisposable
             }
         }
 
-        if (configuration.DrawFates)
+        if (ShouldDrawContent("FATE", GetCurrentContentScope()))
         {
             foreach (var fate in fateTable)
             {
