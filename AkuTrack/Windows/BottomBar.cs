@@ -32,10 +32,18 @@ namespace AkuTrack.Windows
         {
             using (ImRaii.Group())
             {
-                var bottomBarSize = new Vector2(ImGui.GetContentRegionMax().X, 30.0f * ImGuiHelpers.GlobalScale);
-                ImGui.SetCursorPos(ImGui.GetContentRegionMax() - bottomBarSize);
+                var scale = ImGuiHelpers.GlobalScale;
+                var bottomBarSize = new Vector2(ImGui.GetContentRegionAvail().X, 30.0f * scale);
                 using var childBackgroundStyle = ImRaii.PushColor(ImGuiCol.ChildBg, new Vector4(0.11f, 0.085f, 0.043f, 0.92f));
-                using var bottomBar = ImRaii.Child("bottom_child", bottomBarSize);
+                using var bottomBar = ImRaii.Child("bottom_child", bottomBarSize, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+                if (!bottomBar)
+                {
+                    return;
+                }
+
+                var padding = 8.0f * scale;
+                var topPadding = scale;
+                ImGui.SetCursorPos(new Vector2(padding, topPadding));
                 if (ImGui.Button("Config"))
                 {
                     configWindow.Toggle();
@@ -49,24 +57,24 @@ namespace AkuTrack.Windows
                 if (!string.IsNullOrWhiteSpace(playerPositionText))
                 {
                     var playerPositionSize = ImGui.CalcTextSize(playerPositionText);
-                    ImGui.SameLine((ImGui.GetContentRegionMax().X - playerPositionSize.X) * 0.5f);
+                    ImGui.SameLine(MathF.Max(ImGui.GetCursorPosX() + ImGui.GetStyle().ItemSpacing.X, (bottomBarSize.X - playerPositionSize.X) * 0.5f));
                     ImGui.TextColored(configuration.TextColor, playerPositionText);
                 }
 
-                DrawFilterControlsRightAligned();
+                DrawFilterControlsRightAligned(bottomBarSize.X, padding, topPadding);
             }
         }
 
-        private void DrawFilterControlsRightAligned()
+        private void DrawFilterControlsRightAligned(float barWidth, float rightPadding, float topPadding)
         {
             var scale = ImGuiHelpers.GlobalScale;
-            var clearButtonWidth = string.IsNullOrWhiteSpace(configuration.MapSearchFilterText)
-                ? 0.0f
-                : ImGui.CalcTextSize("Clear").X + ImGui.GetStyle().FramePadding.X * 2.0f + ImGui.GetStyle().ItemSpacing.X;
+            var clearButtonWidth = configuration.MapSearchFilterEnabled
+                ? ImGui.CalcTextSize("Clear").X + ImGui.GetStyle().FramePadding.X * 2.0f + ImGui.GetStyle().ItemSpacing.X
+                : 0.0f;
             var inputWidth = configuration.MapSearchFilterEnabled ? 180.0f * scale + ImGui.GetStyle().ItemSpacing.X : 0.0f;
             var filterWidth = ImGui.CalcTextSize("Filter").X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X + inputWidth + clearButtonWidth;
-            ImGui.SetCursorPosX(Math.Max(ImGui.GetCursorPosX(), ImGui.GetContentRegionMax().X - filterWidth - 8.0f * scale));
-            ImGui.SetCursorPosY(4.0f * scale);
+            ImGui.SetCursorPosX(MathF.Max(0.0f, barWidth - filterWidth));
+            ImGui.SetCursorPosY(topPadding);
 
             var mapFilterEnabled = configuration.MapSearchFilterEnabled;
             if (ImGui.Checkbox("Filter##map_search_filter_enabled", ref mapFilterEnabled))
