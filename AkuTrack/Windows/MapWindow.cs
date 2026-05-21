@@ -76,6 +76,10 @@ public class MapWindow : Window, IDisposable
     private string currentPath = string.Empty;
     private uint currentMap = 0;
     private uint currentTerritory = 0;
+    private string selectedMapPath = string.Empty;
+    private string selectedMapBgPath = string.Empty;
+    private static Vector2 cachedRawMapOffsetVector = Vector2.Zero;
+    private static float cachedMapScaleFactor = 100.0f;
     private string currentWindowTitle = "AkuTrack - Map##akutrack_map";
     private uint linkedMapPathTarget;
     private string linkedMapParentPath = string.Empty;
@@ -470,41 +474,66 @@ public class MapWindow : Window, IDisposable
             MathF.Round(41.0f / GetMapScaleFactor() * ((tmp.Y + 1024.0f) / 2048.0f) + 1.0f, 1));
     }
 
+    public unsafe void CaptureSelectedMapFromAgent()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null)
+        {
+            return;
+        }
+
+        var foregroundPath = agentMap->SelectedMapPath.ToString();
+        var backgroundPath = agentMap->SelectedMapBgPath.ToString();
+        if (string.IsNullOrWhiteSpace(foregroundPath) && string.IsNullOrWhiteSpace(backgroundPath))
+        {
+            return;
+        }
+
+        selectedMapPath = foregroundPath;
+        selectedMapBgPath = backgroundPath;
+        currentMap = agentMap->SelectedMapId;
+        currentTerritory = agentMap->SelectedTerritoryId;
+        cachedRawMapOffsetVector = new Vector2(agentMap->SelectedOffsetX * -1, agentMap->SelectedOffsetY * -1);
+        cachedMapScaleFactor = agentMap->SelectedMapSizeFactorFloat;
+    }
+
     private unsafe void DrawMapBackground()
     {
-        if (AgentMap.Instance()->SelectedMapBgPath.Length is 0)
+        CaptureSelectedMapFromAgent();
+        if (string.IsNullOrWhiteSpace(selectedMapBgPath))
         {
-            var gameMapPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
+            if (string.IsNullOrWhiteSpace(selectedMapPath))
+            {
+                return;
+            }
+
+            var gameMapPath = $"{selectedMapPath}.tex";
             if (currentPath != gameMapPath)
             {
-                log.Debug($"MapWindow: FLAT| Texture switched. oldMid {currentMap} new: {AgentMap.Instance()->SelectedMapId} old: {currentPath} new: {gameMapPath}");
+                log.Debug($"MapWindow: FLAT| Texture switched. oldMid {currentMap} new: {currentMap} old: {currentPath} new: {gameMapPath}");
                 if (gameMapPath.Contains("region"))
                 {
                     log.Debug("REGION MAP DETECTED!");
-                    var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
-                    var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
+                    var vanillaBgPath = $"{selectedMapBgPath}.tex";
+                    var vanillaFgPath = $"{selectedMapPath}.tex";
                     log.Debug($"BG Path: {vanillaBgPath} sFG Path: {vanillaFgPath}");
                 }
                 currentPath = gameMapPath;
-                currentMap = AgentMap.Instance()->SelectedMapId;
-                currentTerritory = AgentMap.Instance()->SelectedTerritoryId;
-                FetchAkuGameObjectsFromAkuAPI(AgentMap.Instance()->SelectedMapId);
+                FetchAkuGameObjectsFromAkuAPI(currentMap);
             }
-            var texture = textureProvider.GetFromGame($"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex").GetWrapOrEmpty();
+            var texture = textureProvider.GetFromGame($"{selectedMapPath}.tex").GetWrapOrEmpty();
 
             ImGui.SetCursorPos(DrawPosition);
             ImGui.Image(texture.Handle, texture.Size * Scale);
         }
         else
         {
-            var gameMapPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
+            var gameMapPath = $"{selectedMapBgPath}.tex";
             if (currentPath != gameMapPath)
             {
-                log.Debug($"MapWindow: BLEND| Texture switched. oldMid {currentMap} new: {AgentMap.Instance()->SelectedMapId} old: {currentPath} new: {gameMapPath}");
+                log.Debug($"MapWindow: BLEND| Texture switched. oldMid {currentMap} new: {currentMap} old: {currentPath} new: {gameMapPath}");
                 currentPath = gameMapPath;
-                currentMap = AgentMap.Instance()->SelectedMapId;
-                currentTerritory = AgentMap.Instance()->SelectedTerritoryId;
-                FetchAkuGameObjectsFromAkuAPI(AgentMap.Instance()->SelectedMapId);
+                FetchAkuGameObjectsFromAkuAPI(currentMap);
                 //fogTexture = null;
                 blendedTexture?.Dispose();
                 blendedTexture = LoadTexture();
@@ -518,10 +547,10 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private unsafe IDalamudTextureWrap? LoadTexture()
+    private IDalamudTextureWrap? LoadTexture()
     {
-        var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
-        var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
+        var vanillaBgPath = $"{selectedMapBgPath}.tex";
+        var vanillaFgPath = $"{selectedMapPath}.tex";
 
         var bgFile = GetTexFile(vanillaBgPath);
         var fgFile = GetTexFile(vanillaFgPath);
@@ -2570,12 +2599,30 @@ public class MapWindow : Window, IDisposable
     /// <summary>
     /// Unscaled Vector of SelectedX, SelectedY
     /// </summary>
-    public static unsafe Vector2 GetRawMapOffsetVector() => new(AgentMap.Instance()->SelectedOffsetX * -1, AgentMap.Instance()->SelectedOffsetY * -1);
+    public static unsafe Vector2 GetRawMapOffsetVector()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap != null && (agentMap->SelectedMapPath.Length > 0 || agentMap->SelectedMapBgPath.Length > 0))
+        {
+            cachedRawMapOffsetVector = new Vector2(agentMap->SelectedOffsetX * -1, agentMap->SelectedOffsetY * -1);
+        }
+
+        return cachedRawMapOffsetVector;
+    }
 
     /// <summary>
     /// Selected Scale Factor
     /// </summary>
-    public static unsafe float GetMapScaleFactor() => AgentMap.Instance()->SelectedMapSizeFactorFloat;
+    public static unsafe float GetMapScaleFactor()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap != null && (agentMap->SelectedMapPath.Length > 0 || agentMap->SelectedMapBgPath.Length > 0))
+        {
+            cachedMapScaleFactor = agentMap->SelectedMapSizeFactorFloat;
+        }
+
+        return cachedMapScaleFactor;
+    }
 
     /// <summary>
     /// 1024 vector, center offset vector

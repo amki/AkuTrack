@@ -5,6 +5,13 @@ using System.Numerics;
 
 namespace AkuTrack;
 
+public enum GameMapOpenModifier
+{
+    Ctrl,
+    Shift,
+    Alt,
+}
+
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
@@ -33,6 +40,8 @@ public class Configuration : IPluginConfiguration
     public bool DrawCameraCone { get; set; } = true;
     public bool DrawDebugSquares { get; set; } = false;
     public bool ToggleMapWithGameMap { get; set; } = false;
+    public bool ReplaceGameMap { get; set; } = false;
+    public GameMapOpenModifier ReplaceGameMapModifier { get; set; } = GameMapOpenModifier.Ctrl;
     public bool CenterOnPlayerWhenOpening { get; set; } = false;
     public bool KeepPlayerCentered { get; set; } = false;
     public bool MapSearchFilterEnabled { get; set; } = false;

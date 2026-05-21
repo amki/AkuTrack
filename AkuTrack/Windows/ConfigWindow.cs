@@ -76,8 +76,19 @@ public class ConfigWindow : Window, IDisposable
         DrawSection("Map behavior", configuration.ConfigMapBehaviorOpen, value => configuration.ConfigMapBehaviorOpen = value, () =>
         {
             DrawCheckbox("Center on player when opening", configuration.CenterOnPlayerWhenOpening, value => configuration.CenterOnPlayerWhenOpening = value);
+            DrawCheckbox("Fully replace game map", configuration.ReplaceGameMap, value =>
+            {
+                configuration.ReplaceGameMap = value;
+                if (value)
+                {
+                    configuration.ToggleMapWithGameMap = false;
+                }
+            });
+            DrawGameMapModifierCombo();
             DrawCheckbox("Keep player centered until manual pan", configuration.KeepPlayerCentered, value => configuration.KeepPlayerCentered = value);
+            ImGui.BeginDisabled(configuration.ReplaceGameMap);
             DrawCheckbox("Sync with game map (M)", configuration.ToggleMapWithGameMap, value => configuration.ToggleMapWithGameMap = value);
+            ImGui.EndDisabled();
         });
 
         DrawSection("Players", configuration.ConfigPlayersOpen, value => configuration.ConfigPlayersOpen = value, () =>
@@ -347,6 +358,49 @@ public class ConfigWindow : Window, IDisposable
         }
     }
 
+    private void DrawGameMapModifierCombo()
+    {
+        ImGui.BeginDisabled(!configuration.ReplaceGameMap);
+        if (ImGui.BeginCombo("Open game map modifier", GetGameMapModifierLabel(configuration.ReplaceGameMapModifier)))
+        {
+            foreach (var modifier in GameMapModifiers)
+            {
+                var selected = configuration.ReplaceGameMapModifier == modifier;
+                if (ImGui.Selectable(GetGameMapModifierLabel(modifier), selected))
+                {
+                    configuration.ReplaceGameMapModifier = modifier;
+                    configuration.Save();
+                }
+
+                if (selected)
+                {
+                    ImGui.SetItemDefaultFocus();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+        ImGui.EndDisabled();
+    }
+
+    private static string GetGameMapModifierLabel(GameMapOpenModifier modifier)
+    {
+        return modifier switch
+        {
+            GameMapOpenModifier.Ctrl => "Ctrl",
+            GameMapOpenModifier.Shift => "Shift",
+            GameMapOpenModifier.Alt => "Alt",
+            _ => "Ctrl",
+        };
+    }
+
     private readonly record struct TreasureMapRankConfigInfo(uint Id, string Name);
     private readonly record struct IconCategoryOption(uint IconId, string Label);
+
+    private static readonly GameMapOpenModifier[] GameMapModifiers =
+    [
+        GameMapOpenModifier.Ctrl,
+        GameMapOpenModifier.Shift,
+        GameMapOpenModifier.Alt,
+    ];
 }

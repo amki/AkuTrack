@@ -1,4 +1,5 @@
 using AkuTrack.Managers;
+using Dalamud.Bindings.ImGui;
 using AkuTrack.Windows;
 using Dalamud.Game.Command;
 using Dalamud.Game.Gui;
@@ -8,9 +9,11 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace AkuTrack;
 
@@ -37,6 +40,9 @@ public sealed class Plugin : IDalamudPlugin
     private SearchWindow SearchWindow { get; init; }
     private UploadManager UploadManager { get; init; }
     private bool wasGameMapVisible;
+    private bool allowedGameMapVisible;
+    private int hideGameMapFrames;
+    private bool handledReplacementMapOpen;
     private readonly Hook<OpenMapDelegate> openMapHook;
 
     private unsafe delegate void OpenMapDelegate(AgentMap* thisPtr, OpenMapInfo* data);
@@ -174,6 +180,54 @@ public sealed class Plugin : IDalamudPlugin
         var isGameMapVisible = IsGameMapVisible();
         MapWindow.FocusCurrentFlagMarkerIfNeeded();
 
+        if (Configuration.ReplaceGameMap)
+        {
+            if (allowedGameMapVisible)
+            {
+                if (!isGameMapVisible)
+                {
+                    allowedGameMapVisible = false;
+                    wasGameMapVisible = false;
+                }
+
+                return;
+            }
+
+            if (hideGameMapFrames > 0)
+            {
+                hideGameMapFrames--;
+                HideGameMapAddons();
+                wasGameMapVisible = false;
+                return;
+            }
+
+            if (isGameMapVisible)
+            {
+                if (IsGameMapModifierPressed())
+                {
+                    allowedGameMapVisible = true;
+                    handledReplacementMapOpen = false;
+                    wasGameMapVisible = true;
+                    return;
+                }
+
+                if (!handledReplacementMapOpen)
+                {
+                    MapWindow.CaptureSelectedMapFromAgent();
+                    MapWindow.IsOpen = !MapWindow.IsOpen;
+                    handledReplacementMapOpen = true;
+                }
+
+                CloseGameMap();
+                wasGameMapVisible = false;
+                return;
+            }
+
+            handledReplacementMapOpen = false;
+            wasGameMapVisible = false;
+            return;
+        }
+
         if (!Configuration.ToggleMapWithGameMap)
         {
             wasGameMapVisible = isGameMapVisible;
@@ -197,12 +251,77 @@ public sealed class Plugin : IDalamudPlugin
     private unsafe void OpenMapDetour(AgentMap* thisPtr, OpenMapInfo* data)
     {
         var isFlagMapOpen = data != null && data->Type == MapType.FlagMarker;
+        var isMapKeyOpen = data == null;
+        var replaceGameMap = Configuration.ReplaceGameMap;
+        var allowGameMap = replaceGameMap && (allowedGameMapVisible || IsGameMapModifierPressed());
         openMapHook.Original(thisPtr, data);
+
+        if (replaceGameMap)
+        {
+            allowedGameMapVisible = allowGameMap;
+
+            if (!allowGameMap)
+            {
+                MapWindow.CaptureSelectedMapFromAgent();
+                MapWindow.IsOpen = isMapKeyOpen ? !MapWindow.IsOpen : true;
+                handledReplacementMapOpen = isMapKeyOpen;
+                hideGameMapFrames = 3;
+                CloseGameMap();
+                wasGameMapVisible = false;
+            }
+            else
+            {
+                handledReplacementMapOpen = false;
+            }
+        }
 
         if (isFlagMapOpen)
         {
             MapWindow.FocusCurrentFlagMarkerOnNextDraw();
         }
+    }
+
+    private bool IsGameMapModifierPressed()
+    {
+        var io = ImGui.GetIO();
+        return Configuration.ReplaceGameMapModifier switch
+        {
+            GameMapOpenModifier.Ctrl => io.KeyCtrl || IsKeyDown(0x11),
+            GameMapOpenModifier.Shift => io.KeyShift || IsKeyDown(0x10),
+            GameMapOpenModifier.Alt => io.KeyAlt || IsKeyDown(0x12),
+            _ => io.KeyCtrl || IsKeyDown(0x11),
+        };
+    }
+
+    private static bool IsKeyDown(int virtualKey)
+    {
+        return (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    private static unsafe void CloseGameMap()
+    {
+        AgentMap.Instance()->Hide();
+        HideGameMapAddons();
+    }
+
+    private static unsafe void HideGameMapAddons()
+    {
+        HideAddon("AreaMap");
+        HideAddon("NaviMap");
+    }
+
+    private static unsafe void HideAddon(string addonName)
+    {
+        var addon = GameGui.GetAddonByName(addonName, 1);
+        if (addon.IsNull || !addon.IsVisible)
+        {
+            return;
+        }
+
+        ((AtkUnitBase*)addon.Address)->Hide(false, false, 0);
     }
 
     private static bool IsGameMapVisible()
