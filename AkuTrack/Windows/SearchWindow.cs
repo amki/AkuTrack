@@ -1,4 +1,5 @@
 using AkuTrack.ApiTypes;
+using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Utility;
@@ -21,8 +22,12 @@ namespace AkuTrack.Windows
     public class SearchWindow : Window, IDisposable
     {
         private readonly IPluginLog log;
+        private readonly IFramework framework;
         private readonly IDataManager dataManager;
         private readonly ITextureProvider textureProvider;
+        private readonly WindowSystem windowSystem;
+        private readonly UploadManager uploadManager;
+        private readonly AllaganToolsIpc allaganToolsIpc;
         private readonly Configuration configuration;
         private bool de = false;
         private bool en = false;
@@ -31,13 +36,21 @@ namespace AkuTrack.Windows
         private string input = "";
         private IEnumerable<Lumina.Excel.Sheets.Item>? results;
         public SearchWindow(IPluginLog log,
+            IFramework framework,
             IDataManager dataManager,
             ITextureProvider textureProvider,
+            WindowSystem windowSystem,
+            UploadManager uploadManager,
+            AllaganToolsIpc allaganToolsIpc,
             ConfigWindow configWindow,
             Configuration configuration) : base("AkuTrack - Search##akutrack_search") {
             this.log = log;
+            this.framework = framework;
             this.dataManager = dataManager;
             this.textureProvider = textureProvider;
+            this.windowSystem = windowSystem;
+            this.uploadManager = uploadManager;
+            this.allaganToolsIpc = allaganToolsIpc;
             this.configuration = configuration;
             SizeConstraints = new WindowSizeConstraints
             {
@@ -91,36 +104,44 @@ namespace AkuTrack.Windows
                 var texture = textureProvider.GetFromGameIcon(new GameIconLookup(itemRow.Icon)).GetWrapOrEmpty();
                 ImGui.Image(texture.Handle, texture.Size / 2.0f);
                 ImGui.SameLine();
-                if (ImGui.MenuItem($"{itemRow.Name.ToString()}")) {
-                    log.Debug($"CLIK? {itemRow.RowId}");
-                    var gps = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().ToList();
-                    foreach (var gatheringPointRow in gps)
+                using (ImRaii.PushId($"search_item_{itemRow.RowId}"))
+                {
+                    ImGui.BeginGroup();
+                    try
                     {
-                        foreach (var item in gatheringPointRow.GatheringPointBase.Value.Item)
+                        ImGui.TextUnformatted(itemRow.Name.ToString());
+                        if (ImGui.SmallButton("Extra item data"))
                         {
-                            if (item.TryGetValue<Lumina.Excel.Sheets.GatheringItem>(out var gatheringItemRow)) {
-                                if (gatheringItemRow.Item.TryGetValue<Lumina.Excel.Sheets.Item>(out var itemR)) {
-                                    if(itemR.RowId == itemRow.RowId) {
-                                        log.Debug($"Found node {gatheringPointRow.RowId} in {gatheringPointRow.TerritoryType.Value.PlaceName.Value.Name}");
-                                        
-                                        break;
-                                    }
-                                }
-                                else if (gatheringItemRow.Item.TryGetValue<Lumina.Excel.Sheets.EventItem>(out var eventItemRow)) {
-                                    if (eventItemRow.RowId == itemRow.RowId)
-                                    {
-                                        log.Debug($"Found node {gatheringPointRow.RowId} in {gatheringPointRow.TerritoryType.Value.PlaceName.Value.Name}");
-                                        break;
-                                    }
-                                }
-                            }
+                            OpenItemExtraDataWindow(itemRow.RowId);
                         }
+                    }
+                    finally
+                    {
+                        ImGui.EndGroup();
                     }
                 }
                 c += 1;
                 if (c > 100)
                     break;
             }
+        }
+
+        private void OpenItemExtraDataWindow(uint itemId)
+        {
+            var newName = $"akutrack_item_extra_{itemId}";
+            foreach (var window in windowSystem.Windows)
+            {
+                var splitName = window.WindowName.Split("##");
+                if (splitName.Length == 2 && splitName[1] == newName)
+                {
+                    window.IsOpen = true;
+                    return;
+                }
+            }
+
+            var itemWindow = new ItemExtraDataWindow(windowSystem, log, framework, dataManager, textureProvider, uploadManager, allaganToolsIpc, itemId);
+            windowSystem.AddWindow(itemWindow);
+            itemWindow.IsOpen = true;
         }
     }
 }

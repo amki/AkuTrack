@@ -85,11 +85,13 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<MapWindow>()
             .AddSingleton<SearchWindow>()
             .AddSingleton<UploadManager>()
+            .AddSingleton<AllaganToolsIpc>()
             .AddSingleton<ObjTrackManager>()
             .AddSingleton<TopBar>()
             .AddSingleton<BottomBar>()
             .AddSingleton(windowSystem)
             .AddTransient<DetailsWindow>()
+            .AddTransient<ItemExtraDataWindow>()
             .AddTransient<SightseeingLogEntryWindow>()
             .BuildServiceProvider();
 

@@ -19,6 +19,7 @@ namespace AkuTrack.Managers
         private readonly string chestDropsUrl = "https://raw.githubusercontent.com/Infiziert90/FFXIVGachaSpreadsheet/refs/heads/master/website/static/data/ChestDrops.json";
         private readonly HttpClient httpClient;
         private Dictionary<uint, List<ChestDropEntry>> chestDropsByMap = new();
+        private Dictionary<uint, List<ChestDropEntry>> chestDropsByItem = new();
         public UploadManager(
             IPluginLog log
         ) {
@@ -33,6 +34,13 @@ namespace AkuTrack.Managers
                 : Array.Empty<ChestDropEntry>();
         }
 
+        public IReadOnlyList<ChestDropEntry> GetChestDropsForItem(uint itemId)
+        {
+            return chestDropsByItem.TryGetValue(itemId, out var entries)
+                ? entries
+                : Array.Empty<ChestDropEntry>();
+        }
+
         public async Task ReloadChestDropsAsync()
         {
             try
@@ -43,6 +51,7 @@ namespace AkuTrack.Managers
                 var responseBody = await response.Content.ReadAsStringAsync();
                 var categories = JsonConvert.DeserializeObject<List<ChestDropCategory>>(responseBody) ?? [];
                 var flattened = new Dictionary<uint, List<ChestDropEntry>>();
+                var byItem = new Dictionary<uint, List<ChestDropEntry>>();
 
                 foreach (var category in categories)
                 {
@@ -62,6 +71,16 @@ namespace AkuTrack.Managers
                                     }
 
                                     entries.Add(chest);
+                                    foreach (var reward in chest.Rewards ?? [])
+                                    {
+                                        if (!byItem.TryGetValue(reward.Id, out var itemEntries))
+                                        {
+                                            itemEntries = [];
+                                            byItem[reward.Id] = itemEntries;
+                                        }
+
+                                        itemEntries.Add(chest);
+                                    }
                                 }
                             }
                         }
@@ -69,6 +88,7 @@ namespace AkuTrack.Managers
                 }
 
                 chestDropsByMap = flattened;
+                chestDropsByItem = byItem;
                 log.Debug($"ChestDrops Download: Loaded {chestDropsByMap.Values.Sum(x => x.Count)} chest entries across {chestDropsByMap.Count} maps.");
             }
             catch (Exception ex)

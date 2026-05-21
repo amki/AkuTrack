@@ -46,10 +46,12 @@ public class DetailsWindow : Window, IDisposable
 
     private readonly WindowSystem windowSystem;
     private readonly IPluginLog log;
+    private readonly IFramework framework;
     private readonly IClientState clientState;
     private readonly IDataManager dataManager;
     private readonly ITextureProvider textureProvider;
     private readonly UploadManager uploadManager;
+    private readonly AllaganToolsIpc allaganToolsIpc;
     private readonly ChestRewardClassFilter classFilter;
     private readonly EnpcShopResolver enpcShopResolver;
     private readonly EnpcShopRenderer enpcShopRenderer;
@@ -63,14 +65,16 @@ public class DetailsWindow : Window, IDisposable
     // We give this window a constant ID using ###.
     // This allows for labels to be dynamic, like "{FPS Counter}fps###XYZ counter window",
     // and the window ID will always be "###XYZ counter window" for ImGui
-    public DetailsWindow(WindowSystem windowSystem, IPluginLog log, IClientState clienState, IDataManager dataManager, ITextureProvider textureProvider, UploadManager uploadManager, AkuGameObject obj) : base($"AkuTrack - Details for {obj.t} {obj.bid}##akutrack_details_{obj.t}_{obj.bid}")
+    public DetailsWindow(WindowSystem windowSystem, IPluginLog log, IFramework framework, IClientState clienState, IDataManager dataManager, ITextureProvider textureProvider, UploadManager uploadManager, AllaganToolsIpc allaganToolsIpc, AkuGameObject obj) : base($"AkuTrack - Details for {obj.t} {obj.bid}##akutrack_details_{obj.t}_{obj.bid}")
     {
         this.windowSystem = windowSystem;
         this.log = log;
+        this.framework = framework;
         this.clientState = clienState;
         this.dataManager = dataManager;
         this.textureProvider = textureProvider;
         this.uploadManager = uploadManager;
+        this.allaganToolsIpc = allaganToolsIpc;
         this.classFilter = new ChestRewardClassFilter(dataManager, clienState.ClientLanguage);
         this.enpcShopResolver = new EnpcShopResolver(dataManager, clienState.ClientLanguage);
         this.enpcShopRenderer = new EnpcShopRenderer(textureProvider, ItemIconSize);
@@ -350,6 +354,7 @@ public class DetailsWindow : Window, IDisposable
                     {
                         ImGui.TextDisabled(reward.Details.TrimStart(' ', '|'));
                     }
+                    DrawOpenItemExtraDataButton(reward.Reward.Id);
                 }
                 finally
                 {
@@ -380,6 +385,7 @@ public class DetailsWindow : Window, IDisposable
             ImGui.Image(texture.Handle, texture.Size / 2.0f);
             ImGui.SameLine();
             ImGui.LabelText("", $"Item {c}: {item.Name} ({item.LevelItem.RowId})");
+            DrawOpenItemExtraDataButton(item.RowId);
         }
     }
 
@@ -579,6 +585,32 @@ public class DetailsWindow : Window, IDisposable
             DirectClassJobIds = [],
             GroupFilterIds = [],
         };
+    }
+
+    private void DrawOpenItemExtraDataButton(uint itemId)
+    {
+        if (ImGui.SmallButton($"Extra item data##extra_item_data_{itemId}"))
+        {
+            OpenItemExtraDataWindow(itemId);
+        }
+    }
+
+    private void OpenItemExtraDataWindow(uint itemId)
+    {
+        var newName = $"akutrack_item_extra_{itemId}";
+        foreach (var window in windowSystem.Windows)
+        {
+            var splitName = window.WindowName.Split("##");
+            if (splitName.Length == 2 && splitName[1] == newName)
+            {
+                window.IsOpen = true;
+                return;
+            }
+        }
+
+        var itemWindow = new ItemExtraDataWindow(windowSystem, log, framework, dataManager, textureProvider, uploadManager, allaganToolsIpc, itemId);
+        windowSystem.AddWindow(itemWindow);
+        itemWindow.IsOpen = true;
     }
 
 }
