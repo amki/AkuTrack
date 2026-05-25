@@ -26,6 +26,8 @@ namespace AkuTrack.Managers
         public Dictionary<ulong, AkuGameObject> seenObjTable = new();
         public List<AkuGameObject> toUpload = new();
 
+        private readonly Dictionary<uint, HashSet<ulong>> seenNpcIdsByZone = new();
+
         private TimeSpan lastUpdate = new(0);
         private TimeSpan execDelay = new(0, 0, 1);
 
@@ -53,6 +55,7 @@ namespace AkuTrack.Managers
         public void CleanSeen() {
             seenList.Clear();
             seenObjTable.Clear();
+            seenNpcIdsByZone.Clear();
             toUpload.Clear();
         }
 
@@ -145,6 +148,11 @@ namespace AkuTrack.Managers
                     continue;
                 }
 
+                if (IsTrackableNpc(obj) && HasSeenNpcInCurrentZone(obj))
+                {
+                    continue;
+                }
+
                 var upObj = new AkuGameObject(obj, clientState);
 
                 // Check if there has been an object in this slot already and if it is likely still the same one but has moved (moving changes the uid hash)
@@ -153,12 +161,41 @@ namespace AkuTrack.Managers
                     continue;
                 }
                 seenList.Add(uid, upObj);
+                MarkNpcSeenInCurrentZone(obj);
                 // Remove here because it could also be that the go was here and changed
                 seenObjTable.Remove(obj.GameObjectId);
                 seenObjTable.Add(obj.GameObjectId, upObj);
                 objects.Add(upObj);
             }
             return objects;
+        }
+
+        private bool IsTrackableNpc(IGameObject obj)
+        {
+            return obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc ||
+                obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc;
+        }
+
+        private bool HasSeenNpcInCurrentZone(IGameObject obj)
+        {
+            return seenNpcIdsByZone.TryGetValue(clientState.TerritoryType, out var seenNpcIds) &&
+                seenNpcIds.Contains(obj.GameObjectId);
+        }
+
+        private void MarkNpcSeenInCurrentZone(IGameObject obj)
+        {
+            if (!IsTrackableNpc(obj))
+            {
+                return;
+            }
+
+            if (!seenNpcIdsByZone.TryGetValue(clientState.TerritoryType, out var seenNpcIds))
+            {
+                seenNpcIds = new HashSet<ulong>();
+                seenNpcIdsByZone.Add(clientState.TerritoryType, seenNpcIds);
+            }
+
+            seenNpcIds.Add(obj.GameObjectId);
         }
 
         private bool HasTableContentChanged(IGameObject obj, AkuGameObject akuObj) {

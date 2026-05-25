@@ -98,7 +98,7 @@ public class MapWindow : Window, IDisposable
     private Dictionary<string, List<MapMarkerLink>>? fallbackMapLinksByName;
     private Dictionary<uint, uint>? contentFinderTypeByPlaceName;
     private Dictionary<string, uint>? contentFinderTypeByName;
-    private HashSet<uint>? contentFinderMapIds;
+    private HashSet<uint>? contentFinderTerritoryIds;
     private Dictionary<string, List<MapMarkerLink>>? territoryMapLinksByName;
     private List<AkuGameObject> clickedObjects = new();
     private List<ClickedPlayer> clickedPlayers = new();
@@ -400,12 +400,10 @@ public class MapWindow : Window, IDisposable
                 DrawAkuGameObject(o.Value, MapObjectSource.SelfFound, contentScope);
             }
         }
-        if(ShouldDrawContent("RemoteMarker", contentScope)) {
-            foreach (var o in downloadList)
-            {
-                if (!objTrackManager.seenList.ContainsKey(o.Key))
-                    DrawAkuGameObject(o.Value, MapObjectSource.Downloaded, contentScope);
-            }
+        foreach (var o in downloadList)
+        {
+            if (currentMap != clientState.MapId || !objTrackManager.seenList.ContainsKey(o.Key))
+                DrawAkuGameObject(o.Value, MapObjectSource.Downloaded, contentScope);
         }
 
         try
@@ -742,21 +740,26 @@ public class MapWindow : Window, IDisposable
                                    && value.Contains(search, StringComparison.CurrentCultureIgnoreCase));
     }
 
-    private MapContentScope GetCurrentContentScope() => IsContentFinderMap(currentMap) ? MapContentScope.ContentFinder : MapContentScope.World;
+    private MapContentScope GetCurrentContentScope() => IsContentFinderMap(currentMap, currentTerritory) ? MapContentScope.ContentFinder : MapContentScope.World;
 
-    private bool IsContentFinderMap(uint mapId)
+    private bool IsContentFinderMap(uint mapId, uint territoryId)
     {
-        if (contentFinderMapIds is null)
+        if (contentFinderTerritoryIds is null)
         {
-            contentFinderMapIds = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ContentFinderCondition>(clientState.ClientLanguage)
+            contentFinderTerritoryIds = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ContentFinderCondition>(clientState.ClientLanguage)
                 .Where(content => content.TerritoryType.IsValid
-                                  && content.TerritoryType.Value.Map.IsValid
-                                  && content.TerritoryType.Value.Map.RowId != 0)
-                .Select(content => content.TerritoryType.Value.Map.RowId)
+                                  && content.TerritoryType.RowId != 0)
+                .Select(content => content.TerritoryType.RowId)
                 .ToHashSet();
         }
 
-        return contentFinderMapIds.Contains(mapId);
+        if (dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>(clientState.ClientLanguage).TryGetRow(mapId, out var map)
+            && map.TerritoryType.RowId != 0)
+        {
+            return contentFinderTerritoryIds.Contains(map.TerritoryType.RowId);
+        }
+
+        return territoryId != 0 && contentFinderTerritoryIds.Contains(territoryId);
     }
 
     private bool ShouldDrawContent(string category, MapContentScope scope)
