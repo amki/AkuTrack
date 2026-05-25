@@ -251,12 +251,21 @@ namespace AkuTrack.Managers
             lock (downloadedZoneNpcsLock)
             {
                 return downloadedZoneNpcs.Any(downloaded =>
+                    IsExactDownloadedEventNpcMatch(downloaded, obj) ||
                     downloaded.zid == obj.zid &&
                     downloaded.t == obj.t &&
                     downloaded.bid == obj.bid &&
                     downloaded.nid == obj.nid &&
                     IsRoughlySamePosition(downloaded.pos, obj.pos));
             }
+        }
+
+        private static bool IsExactDownloadedEventNpcMatch(AkuGameObject downloaded, AkuGameObject current)
+        {
+            return current.t == "EventNpc" &&
+                downloaded.t == current.t &&
+                downloaded.unique_ingame_id is not null &&
+                downloaded.unique_ingame_id == current.unique_ingame_id;
         }
 
         private static bool IsRoughlySamePosition(Vector3 left, Vector3 right)
