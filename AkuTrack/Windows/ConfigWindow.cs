@@ -124,23 +124,35 @@ public class ConfigWindow : Window, IDisposable
     {
         DrawSourceMasterToggles(scope);
         ImGui.Separator();
-
-        DrawObjectCategorySettings(scope, "BattleNpc", "Show battle NPCs", GetContentToggle(scope, "BattleNpc"), value => SetContentToggle(scope, "BattleNpc", value));
-        DrawCheckbox("Show critical engagements", GetContentToggle(scope, "CriticalEngagements"), value => SetContentToggle(scope, "CriticalEngagements", value));
-        DrawObjectCategorySettings(scope, "EventNpc", "Show event NPCs", GetContentToggle(scope, "EventNpc"), value => SetContentToggle(scope, "EventNpc", value));
-        DrawObjectCategoryWithSources(scope, "EventObj", "Show event objects", GetEventObjIconOptions());
-        DrawCheckbox("Show FATEs", GetContentToggle(scope, "FATE"), value => SetContentToggle(scope, "FATE", value));
-        DrawObjectCategoryWithSources(scope, "Fishingspot", "Show fishing spots", GetFishingSpotIconOptions());
-        DrawObjectCategoryWithSources(scope, "GatheringPoint", "Show gathering points", GetGatheringPointIconOptions());
-        DrawCheckbox("Show housing map markers", GetContentToggle(scope, "HousingMapMarkerInfo"), value => SetContentToggle(scope, "HousingMapMarkerInfo", value));
-        DrawCheckbox("Show map markers with icons and labels", GetContentToggle(scope, "MapMarkersWithIcons"), value => SetContentToggle(scope, "MapMarkersWithIcons", value));
-        DrawCheckbox("Show map markers with labels only", GetContentToggle(scope, "MapMarkerLabelsOnly"), value => SetContentToggle(scope, "MapMarkerLabelsOnly", value));
-        DrawObjectCategoryWithSources(scope, "Quest", "Show quest markers", GetQuestIconOptions());
-        DrawCheckbox("Show remote markers", GetContentToggle(scope, "RemoteMarker"), value => SetContentToggle(scope, "RemoteMarker", value));
-        DrawCheckbox("Show sightseeing log entries", GetContentToggle(scope, "SightseeingLog"), value => SetContentToggle(scope, "SightseeingLog", value));
-        DrawObjectCategoryWithSources(scope, "SpearfishingNotebook", "Show spearfishing spots", GetSpearfishingSpotIconOptions());
-        DrawObjectCategorySettings(scope, "Treasure", "Show treasure", GetContentToggle(scope, "Treasure"), value => SetContentToggle(scope, "Treasure", value));
-        DrawTreasureMapSettings(scope);
+        if (scope == MapContentScope.ContentFinder)
+        {
+            DrawObjectCategorySettings(scope, "BattleNpc", "Show battle NPCs", GetContentToggle(scope, "BattleNpc"), value => SetContentToggle(scope, "BattleNpc", value));
+            DrawCheckbox("Show critical engagements", GetContentToggle(scope, "CriticalEngagements"), value => SetContentToggle(scope, "CriticalEngagements", value));
+            DrawObjectCategorySettings(scope, "EventNpc", "Show event NPCs", GetContentToggle(scope, "EventNpc"), value => SetContentToggle(scope, "EventNpc", value));
+            DrawObjectCategoryWithSources(scope, "EventObj", "Show event objects", GetEventObjIconOptions());
+            DrawCheckbox("Show FATEs", GetContentToggle(scope, "FATE"), value => SetContentToggle(scope, "FATE", value));
+            DrawCheckbox("Show map markers with icons and labels", GetContentToggle(scope, "MapMarkersWithIcons"), value => SetContentToggle(scope, "MapMarkersWithIcons", value));
+            DrawCheckbox("Show map markers with labels only", GetContentToggle(scope, "MapMarkerLabelsOnly"), value => SetContentToggle(scope, "MapMarkerLabelsOnly", value));
+            DrawObjectCategorySettings(scope, "Treasure", "Show treasure", GetContentToggle(scope, "Treasure"), value => SetContentToggle(scope, "Treasure", value));
+        } else
+        {
+            DrawObjectCategorySettings(scope, "BattleNpc", "Show battle NPCs", GetContentToggle(scope, "BattleNpc"), value => SetContentToggle(scope, "BattleNpc", value));
+            DrawCheckbox("Show critical engagements", GetContentToggle(scope, "CriticalEngagements"), value => SetContentToggle(scope, "CriticalEngagements", value));
+            DrawObjectCategorySettings(scope, "EventNpc", "Show event NPCs", GetContentToggle(scope, "EventNpc"), value => SetContentToggle(scope, "EventNpc", value));
+            DrawObjectCategoryWithSources(scope, "EventObj", "Show event objects", GetEventObjIconOptions());
+            DrawCheckbox("Show FATEs", GetContentToggle(scope, "FATE"), value => SetContentToggle(scope, "FATE", value));
+            DrawObjectCategoryWithSources(scope, "Fishingspot", "Show fishing spots", GetFishingSpotIconOptions());
+            DrawObjectCategoryWithSources(scope, "GatheringPoint", "Show gathering points", GetGatheringPointIconOptions());
+            DrawCheckbox("Show housing map markers", GetContentToggle(scope, "HousingMapMarkerInfo"), value => SetContentToggle(scope, "HousingMapMarkerInfo", value));
+            DrawCheckbox("Show map markers with icons and labels", GetContentToggle(scope, "MapMarkersWithIcons"), value => SetContentToggle(scope, "MapMarkersWithIcons", value));
+            DrawCheckbox("Show map markers with labels only", GetContentToggle(scope, "MapMarkerLabelsOnly"), value => SetContentToggle(scope, "MapMarkerLabelsOnly", value));
+            DrawObjectCategoryWithSources(scope, "Quest", "Show quest markers", GetQuestIconOptions());
+            DrawCheckbox("Show remote markers", GetContentToggle(scope, "RemoteMarker"), value => SetContentToggle(scope, "RemoteMarker", value));
+            DrawCheckbox("Show sightseeing log entries", GetContentToggle(scope, "SightseeingLog"), value => SetContentToggle(scope, "SightseeingLog", value));
+            DrawObjectCategoryWithSources(scope, "SpearfishingNotebook", "Show spearfishing spots", GetSpearfishingSpotIconOptions());
+            DrawObjectCategorySettings(scope, "Treasure", "Show treasure", GetContentToggle(scope, "Treasure"), value => SetContentToggle(scope, "Treasure", value));
+            DrawTreasureMapSettings(scope);
+        }
     }
 
     private void DrawSourceMasterToggles(MapContentScope scope)
