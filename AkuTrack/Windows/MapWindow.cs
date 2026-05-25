@@ -402,7 +402,7 @@ public class MapWindow : Window, IDisposable
         }
         foreach (var o in downloadList)
         {
-            if (currentMap != clientState.MapId || !objTrackManager.seenList.ContainsKey(o.Key))
+            if (currentMap != clientState.MapId || !IsSeenSelfFoundObject(o.Key, o.Value))
                 DrawAkuGameObject(o.Value, MapObjectSource.Downloaded, contentScope);
         }
 
@@ -738,6 +738,16 @@ public class MapWindow : Window, IDisposable
         var search = configuration.MapSearchFilterText.Trim();
         return values.Any(value => !string.IsNullOrWhiteSpace(value)
                                    && value.Contains(search, StringComparison.CurrentCultureIgnoreCase));
+    }
+
+    private bool IsSeenSelfFoundObject(string uniqueId, AkuGameObject obj)
+    {
+        if (obj.unique_ingame_id is { } ingameId)
+        {
+            return objTrackManager.seenList.Values.Any(seen => seen.unique_ingame_id == ingameId);
+        }
+
+        return objTrackManager.seenList.ContainsKey(uniqueId);
     }
 
     private MapContentScope GetCurrentContentScope() => IsContentFinderMap(currentMap, currentTerritory) ? MapContentScope.ContentFinder : MapContentScope.World;

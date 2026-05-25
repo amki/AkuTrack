@@ -27,6 +27,7 @@ namespace AkuTrack.ApiTypes
             this.t = obj.ObjectKind.ToString();
             this.pos = obj.Position;
             this.bid = obj.BaseId;
+            this.unique_ingame_id = obj.GameObjectId;
             this.hr = obj.HitboxRadius;
             this.name = obj.Name.ToString();
             this.mid = clientState.MapId;
@@ -52,6 +53,7 @@ namespace AkuTrack.ApiTypes
             this.pos = new Vector3(dgo.x, dgo.y, dgo.z);
             this.r = dgo.rotation;
             this.bid = dgo.base_id;
+            this.unique_ingame_id = dgo.unique_ingame_id;
             this.npiid = dgo.npiid;
             this.moid = dgo.moid;
             this.hr = dgo.hit_radius;
@@ -72,6 +74,7 @@ namespace AkuTrack.ApiTypes
         public Vector3 pos { get; set; }
         public float r { get; set; }
         public uint bid { get; set; }
+        public ulong? unique_ingame_id { get; set; }
         public uint? npiid {  get; set; }
         public int moid { get; set; }
         //public bool v { get; set; }
