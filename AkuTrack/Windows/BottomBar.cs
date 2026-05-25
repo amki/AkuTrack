@@ -42,7 +42,7 @@ namespace AkuTrack.Windows
                 }
 
                 var padding = 8.0f * scale;
-                var topPadding = scale;
+                var topPadding = MathF.Max(3.0f * scale, (bottomBarSize.Y - ImGui.GetFrameHeight()) * 0.5f);
                 ImGui.SetCursorPos(new Vector2(padding, topPadding));
                 if (ImGui.Button("Config"))
                 {
@@ -68,12 +68,12 @@ namespace AkuTrack.Windows
         private void DrawFilterControlsRightAligned(float barWidth, float rightPadding, float topPadding)
         {
             var scale = ImGuiHelpers.GlobalScale;
-            var clearButtonWidth = configuration.MapSearchFilterEnabled
+            var clearButtonWidth = configuration.MapSearchFilterEnabled && !string.IsNullOrWhiteSpace(configuration.MapSearchFilterText)
                 ? ImGui.CalcTextSize("Clear").X + ImGui.GetStyle().FramePadding.X * 2.0f + ImGui.GetStyle().ItemSpacing.X
                 : 0.0f;
             var inputWidth = configuration.MapSearchFilterEnabled ? 180.0f * scale + ImGui.GetStyle().ItemSpacing.X : 0.0f;
-            var filterWidth = ImGui.CalcTextSize("Filter").X + ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.X + inputWidth + clearButtonWidth;
-            ImGui.SetCursorPosX(MathF.Max(0.0f, barWidth - filterWidth));
+            var filterWidth = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + ImGui.CalcTextSize("Filter").X + inputWidth + clearButtonWidth;
+            ImGui.SetCursorPosX(MathF.Max(0.0f, barWidth - filterWidth - rightPadding));
             ImGui.SetCursorPosY(topPadding);
 
             var mapFilterEnabled = configuration.MapSearchFilterEnabled;
