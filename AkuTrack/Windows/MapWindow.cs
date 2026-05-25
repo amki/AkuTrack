@@ -599,6 +599,8 @@ public class MapWindow : Window, IDisposable
             return;
         if (obj.t == "EventNpc")
         {
+            if (ShouldHideDownloadedNpcWithoutUniqueIngameId(obj, source))
+                return;
             if (!configuration.IsObjectSourceEnabled(scope, "EventNpc", source))
                 return;
             if (!ShouldDrawContent("EventNpc", scope))
@@ -620,6 +622,8 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.t == "BattleNpc")
         {
+            if (ShouldHideDownloadedNpcWithoutUniqueIngameId(obj, source))
+                return;
             if (!configuration.IsObjectSourceEnabled(scope, "BattleNpc", source))
                 return;
             if (!ShouldDrawContent("BattleNpc", scope))
@@ -721,6 +725,13 @@ public class MapWindow : Window, IDisposable
 
     private void DrawTooltip(AkuGameObject obj) {
         ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
+    }
+
+    private bool ShouldHideDownloadedNpcWithoutUniqueIngameId(AkuGameObject obj, MapObjectSource source)
+    {
+        return source == MapObjectSource.Downloaded
+               && configuration.OnlyDrawDownloadedNpcsWithUniqueIngameId
+               && obj.unique_ingame_id is null;
     }
 
     private bool IsMapSearchFilterActive()

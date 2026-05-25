@@ -123,6 +123,7 @@ public class ConfigWindow : Window, IDisposable
     private void DrawWorldContentSettings(MapContentScope scope)
     {
         DrawSourceMasterToggles(scope);
+        DrawCheckbox("Only show downloaded NPCs with unique ingame id", configuration.OnlyDrawDownloadedNpcsWithUniqueIngameId, value => configuration.OnlyDrawDownloadedNpcsWithUniqueIngameId = value);
         ImGui.Separator();
         if (scope == MapContentScope.ContentFinder)
         {

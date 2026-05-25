@@ -99,6 +99,15 @@ namespace AkuTrack.Managers
 
         public async Task<List<AkuGameObject>> DownloadMapContentFromAPI(uint mid) {
             var queryUrl = $"{baseUrl}/api.php?t=None&mid={mid}&sort=created_at_desc&offset=0";
+            return await DownloadContentFromAPI(queryUrl);
+        }
+
+        public async Task<List<AkuGameObject>> DownloadZoneContentFromAPI(uint zid) {
+            var queryUrl = $"{baseUrl}/api.php?t=None&zid={zid}&sort=created_at_desc&offset=0";
+            return await DownloadContentFromAPI(queryUrl);
+        }
+
+        private async Task<List<AkuGameObject>> DownloadContentFromAPI(string queryUrl) {
             log.Debug($"AkuAPI Download: Querying {queryUrl}");
             var result = new List<AkuGameObject>();
             var response = await httpClient.GetAsync(queryUrl);

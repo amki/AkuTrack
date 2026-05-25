@@ -45,6 +45,7 @@ public class Configuration : IPluginConfiguration
     public bool DrawFates { get; set; } = true;
     public bool DrawMapMarkersWithIcons { get; set; } = true;
     public bool DrawMapMarkerLabelsOnly { get; set; } = true;
+    public bool OnlyDrawDownloadedNpcsWithUniqueIngameId { get; set; } = false;
     public bool DrawContentFinderConditionMarkers { get; set; } = true;
     public bool DrawContentFinderRemoteMarker { get; set; } = true;
     public bool DrawContentFinderBNpc { get; set; } = true;

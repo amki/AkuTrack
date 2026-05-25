@@ -6,8 +6,10 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Text;
+using System.Threading.Tasks;
 using System.Threading.Channels;
 using System.Security.Cryptography;
 
@@ -27,9 +29,15 @@ namespace AkuTrack.Managers
         public List<AkuGameObject> toUpload = new();
 
         private readonly Dictionary<uint, HashSet<ulong>> seenNpcIdsByZone = new();
+        private readonly List<AkuGameObject> downloadedZoneNpcs = new();
+        private readonly object downloadedZoneNpcsLock = new();
+        private uint downloadedZoneId;
+        private uint downloadingZoneId;
+        private Task? downloadZoneNpcsTask;
 
         private TimeSpan lastUpdate = new(0);
         private TimeSpan execDelay = new(0, 0, 1);
+        private const float NpcRoughPositionDistance = 10.0f;
 
         public ObjTrackManager(
             IFramework framework,
@@ -56,6 +64,13 @@ namespace AkuTrack.Managers
             seenList.Clear();
             seenObjTable.Clear();
             seenNpcIdsByZone.Clear();
+            lock (downloadedZoneNpcsLock)
+            {
+                downloadedZoneNpcs.Clear();
+            }
+
+            downloadedZoneId = 0;
+            downloadingZoneId = 0;
             toUpload.Clear();
         }
 
@@ -72,6 +87,7 @@ namespace AkuTrack.Managers
         private async void DoUpdate(IFramework framework)
         {
             //log.Debug("Tick!");
+            StartDownloadedZoneNpcsRefresh();
             var ups = LookForNewObjects();
             if (ups.Count > 0)
             {
@@ -155,6 +171,13 @@ namespace AkuTrack.Managers
 
                 var upObj = new AkuGameObject(obj, clientState);
 
+                if (IsKnownDownloadedNpc(upObj))
+                {
+                    log.Debug($"Skipping upload for known downloaded {upObj.t} bid {upObj.bid} nid {upObj.nid} gameId {upObj.unique_ingame_id} zone {upObj.zid} map {upObj.mid} at {upObj.pos.X:F1}/{upObj.pos.Y:F1}/{upObj.pos.Z:F1}.");
+                    MarkNpcSeenInCurrentZone(obj);
+                    continue;
+                }
+
                 // Check if there has been an object in this slot already and if it is likely still the same one but has moved (moving changes the uid hash)
                 if (seenObjTable.ContainsKey(obj.GameObjectId) && !HasTableContentChanged(obj, upObj)) {
                     //log.Debug($"Obj {obj.GameObjectId} has moved but was already sent.");
@@ -170,10 +193,86 @@ namespace AkuTrack.Managers
             return objects;
         }
 
+        private void StartDownloadedZoneNpcsRefresh()
+        {
+            var zoneId = clientState.TerritoryType;
+            if (zoneId == 0 || downloadedZoneId == zoneId || downloadingZoneId == zoneId)
+            {
+                return;
+            }
+
+            if (downloadZoneNpcsTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            downloadingZoneId = zoneId;
+            downloadZoneNpcsTask = RefreshDownloadedZoneNpcs(zoneId);
+        }
+
+        private async Task RefreshDownloadedZoneNpcs(uint zoneId)
+        {
+            try
+            {
+                var downloads = await uploadManager.DownloadZoneContentFromAPI(zoneId);
+                var zoneNpcs = downloads
+                    .Where(obj => IsTrackableNpc(obj) && obj.unique_ingame_id is not null)
+                    .ToList();
+
+                lock (downloadedZoneNpcsLock)
+                {
+                    downloadedZoneNpcs.Clear();
+                    downloadedZoneNpcs.AddRange(zoneNpcs);
+                    downloadedZoneId = zoneId;
+                }
+
+                log.Debug($"AkuAPI Download: Cached {zoneNpcs.Count} zone NPCs with unique ingame ids for zone {zoneId}.");
+            }
+            catch (Exception ex)
+            {
+                log.Debug($"AkuAPI Download: Could not refresh zone NPC cache for zone {zoneId}: {ex.Message}");
+            }
+            finally
+            {
+                if (downloadingZoneId == zoneId)
+                {
+                    downloadingZoneId = 0;
+                }
+            }
+        }
+
+        private bool IsKnownDownloadedNpc(AkuGameObject obj)
+        {
+            if (!IsTrackableNpc(obj))
+            {
+                return false;
+            }
+
+            lock (downloadedZoneNpcsLock)
+            {
+                return downloadedZoneNpcs.Any(downloaded =>
+                    downloaded.zid == obj.zid &&
+                    downloaded.t == obj.t &&
+                    downloaded.bid == obj.bid &&
+                    downloaded.nid == obj.nid &&
+                    IsRoughlySamePosition(downloaded.pos, obj.pos));
+            }
+        }
+
+        private static bool IsRoughlySamePosition(Vector3 left, Vector3 right)
+        {
+            return Vector3.Distance(left, right) <= NpcRoughPositionDistance;
+        }
+
         private bool IsTrackableNpc(IGameObject obj)
         {
             return obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc ||
                 obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc;
+        }
+
+        private static bool IsTrackableNpc(AkuGameObject obj)
+        {
+            return obj.t == "EventNpc" || obj.t == "BattleNpc";
         }
 
         private bool HasSeenNpcInCurrentZone(IGameObject obj)
