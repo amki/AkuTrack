@@ -1,13 +1,9 @@
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Component.GUI;
 using Newtonsoft.Json;
-using Serilog;
 using System;
-using System.Collections.Generic;
 using System.Numerics;
-using System.Runtime.ConstrainedExecution;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -22,7 +18,36 @@ namespace AkuTrack.ApiTypes
             this.name = string.Empty;
         }
 
-        public unsafe AkuGameObject(IGameObject obj, IClientState clientState) {
+        public AkuGameObject(
+            string objectKind,
+            Vector3 position,
+            uint baseId,
+            ulong gameObjectId,
+            float hitboxRadius,
+            string name,
+            float rotation,
+            uint? nameId,
+            int modelCharaId,
+            uint? namePlateIconId,
+            IClientState clientState)
+        {
+            this.created_at = DateTimeOffset.Now;
+            this.t = objectKind;
+            this.pos = position;
+            this.bid = baseId;
+            this.unique_ingame_id = gameObjectId;
+            this.hr = hitboxRadius;
+            this.name = name;
+            this.mid = clientState.MapId;
+            this.zid = clientState.TerritoryType;
+            this.r = rotation;
+            this.nid = nameId;
+            this.moid = modelCharaId;
+            this.npiid = namePlateIconId;
+        }
+
+        public AkuGameObject(IGameObject obj, IClientState clientState) {
+            uint? nameId = obj is ICharacter c ? c.NameId : null;
             this.created_at = DateTimeOffset.Now;
             this.t = obj.ObjectKind.ToString();
             this.pos = obj.Position;
@@ -33,14 +58,7 @@ namespace AkuTrack.ApiTypes
             this.mid = clientState.MapId;
             this.zid = clientState.TerritoryType;
             this.r = obj.Rotation;
-
-            if (obj is ICharacter c)
-            {
-                this.nid = c.NameId;
-                FFXIVClientStructs.FFXIV.Client.Game.Character.Character* chr = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)c.Address;
-                this.moid = chr->ModelContainer.ModelCharaId;
-                this.npiid = chr->NamePlateIconId;
-            }
+            this.nid = nameId;
         }
 
         public AkuGameObject(DownloadGameObject dgo) {
@@ -133,6 +151,26 @@ namespace AkuTrack.ApiTypes
             }
             if (input == string.Empty)
                 return null;
+            return CalculateUniqueId(input);
+        }
+
+        public static string? GetUniqueId(string objectKind, uint baseId, Vector3 position, uint? nameId)
+        {
+            string input;
+            if (objectKind == ObjectKind.EventNpc.ToString() || objectKind == ObjectKind.BattleNpc.ToString())
+            {
+                if (nameId is null)
+                {
+                    return null;
+                }
+
+                input = $"{objectKind},{baseId},{Math.Round(position.X / 10, 0) * 10},{Math.Round(position.Y / 10, 0) * 10},{Math.Round(position.Z / 10, 0) * 10},{nameId}";
+            }
+            else
+            {
+                input = $"{objectKind},{baseId},{position.X},{position.Y},{position.Z}";
+            }
+
             return CalculateUniqueId(input);
         }
     }

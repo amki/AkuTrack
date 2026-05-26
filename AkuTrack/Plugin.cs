@@ -159,6 +159,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         ClientState.Login -= OnLogin;
         serviceProvider.GetRequiredService<IFramework>().Update -= OnFrameworkUpdate;
+        serviceProvider.GetRequiredService<ObjTrackManager>().Dispose();
         openMapHook.Dispose();
         
         windowSystem.RemoveAllWindows();
