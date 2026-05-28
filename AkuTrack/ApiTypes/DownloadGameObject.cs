@@ -19,6 +19,7 @@ namespace AkuTrack.ApiTypes
         public uint zone_id { get; set; }
         public uint map_id { get; set; }
         public uint base_id { get; set; }
+        public ulong? unique_ingame_id { get; set; }
         public int moid { get; set; }
         public uint? nid { get; set; }
         public uint? npiid { get; set; }

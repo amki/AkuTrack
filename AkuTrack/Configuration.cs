@@ -17,7 +17,6 @@ public class Configuration : IPluginConfiguration
     public bool DrawGatheringPoint { get; set; } = true;
     public bool DrawCameraCone { get; set; } = true;
     public bool DrawDebugSquares { get; set; } = false;
-    public bool ToggleMapWithGameMap { get; set; } = false;
     public bool CenterOnPlayerWhenOpening { get; set; } = false;
 
     public Vector4 TextColor { get; set; } = new Vector4(1.0f, 0.0f, 1.0f, 1.0f);
