@@ -1,8 +1,10 @@
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Common.Configuration;
+using Lumina.Excel.Sheets;
 using Serilog;
 using System;
 using System.Numerics;
@@ -58,31 +60,15 @@ public class ConfigWindow : Window, IDisposable
             configuration.DrawRemoteMarker = drawRemoteMarker;
             configuration.Save();
         }
-        var drawBNpc = configuration.DrawBNpc;
-        if (ImGui.Checkbox("Draw BNpc?", ref drawBNpc)) {
-            configuration.DrawBNpc = drawBNpc;
-            configuration.Save();
-        }
-        ImGui.SameLine();
-        var drawENpc = configuration.DrawENpc;
-        if (ImGui.Checkbox("Draw ENpc?", ref drawENpc))
+        foreach (var name in Enum.GetNames(typeof(ObjectKind)))
         {
-            configuration.DrawENpc = drawENpc;
-            configuration.Save();
-        }
-
-        var drawEObj = configuration.DrawEObj;
-        if (ImGui.Checkbox("Draw EObj?", ref drawEObj))
-        {
-            configuration.DrawEObj = drawEObj;
-            configuration.Save();
-        }
-
-        var drawGatheringPoint = configuration.DrawGatheringPoint;
-        if (ImGui.Checkbox("Draw GatheringPoint?", ref drawGatheringPoint))
-        {
-            configuration.DrawGatheringPoint = drawGatheringPoint;
-            configuration.Save();
+            var type = Enum.Parse<ObjectKind>(name, true);
+            var shouldDraw = configuration.shouldDraw[type];
+            if (ImGui.Checkbox($"Draw {name}?", ref shouldDraw))
+            {
+                configuration.shouldDraw[type] = shouldDraw;
+                configuration.Save();
+            }
         }
 
         var drawCameraCone = configuration.DrawCameraCone;

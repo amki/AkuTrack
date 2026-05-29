@@ -203,7 +203,7 @@ public class MapWindow : Window, IDisposable
                 }
                 var pos = new Vector2(row.X, row.Y);
                 //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
-                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
+                //DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
             }
         } catch(ArgumentOutOfRangeException) {
             // FIXME: How to get markers from region maps?!?
@@ -305,16 +305,15 @@ public class MapWindow : Window, IDisposable
     private void DrawAkuGameObject(AkuGameObject obj) {
         if (obj.mid != currentMap)
             return;
-        if (obj.t == "EventNpc")
+        if(!configuration.shouldDraw[obj.objectKind]) {
+            return;
+        }
+        if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
         {
-            if (!configuration.DrawENpc)
-                return;
             DrawIcon(60424, obj.pos, obj.r, obj.tint);
         }
-        else if (obj.t == "EventObj")
+        else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
         {
-            if (!configuration.DrawEObj)
-                return;
             if (obj.bid == 2000401) // summoning bell
                 DrawIcon(60425, obj.pos, obj.r, obj.tint);
             else if (obj.bid == 2000402) // market board
@@ -324,13 +323,11 @@ public class MapWindow : Window, IDisposable
             else
                 DrawIcon(60353, obj.pos, obj.r, obj.tint);
         }
-        else if (obj.t == "BattleNpc")
+        else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
         {
-            if (!configuration.DrawBNpc)
-                return;
             DrawIcon(60422, obj.pos, obj.r, obj.tint);
         }
-        else if (obj.t == "Aetheryte")
+        else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte)
         {
             if(dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().TryGetRow(obj.bid, out var aetheryte)) {
                 if (aetheryte.AethernetName.Value.Name.ToString() != string.Empty && aetheryte.PlaceName.Value.Name.ToString() == string.Empty)
@@ -340,10 +337,8 @@ public class MapWindow : Window, IDisposable
             }
             DrawIcon(60453, obj.pos, 3.14f, obj.tint);
         }
-        else if (obj.t == "GatheringPoint")
+        else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint)
         {
-            if (!configuration.DrawGatheringPoint)
-                return;
             if (!dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>().TryGetRow(obj.bid, out var gatheringPointRow))
             {
                 log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");
@@ -351,7 +346,7 @@ public class MapWindow : Window, IDisposable
             }
             DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r, obj.tint);
         }
-        else if (obj.t == "Treasure")
+        else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure)
             DrawIcon(60354, obj.pos, obj.r, obj.tint);
         else
             DrawIcon(60515, obj.pos, obj.r, obj.tint);
@@ -689,7 +684,7 @@ public class MapWindow : Window, IDisposable
             downloadList.Clear();
             foreach (var obj in objs)
             {
-                if (obj.t == "EventNpc")
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
                 {
                     try
                     {
@@ -701,7 +696,7 @@ public class MapWindow : Window, IDisposable
                         log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
                     }
                 }
-                if (obj.t == "BattleNpc")
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
                 {
                     if (obj.nid == null)
                         continue;
@@ -715,7 +710,7 @@ public class MapWindow : Window, IDisposable
                         log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
                     }
                 }
-                if (obj.t == "EventObj")
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
                 {
                     try
                     {
@@ -727,7 +722,7 @@ public class MapWindow : Window, IDisposable
                         log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
                     }
                 }
-                if(obj.t == "GatheringPoint") {
+                if(obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint) {
                     try
                     {
                         var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>(clientState.ClientLanguage).GetRow(obj.bid);

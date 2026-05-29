@@ -2,6 +2,7 @@ using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using FFXIVClientStructs.Havok.Common.Base.Types;
 using Newtonsoft.Json;
 using Serilog;
 using System;
@@ -17,7 +18,7 @@ namespace AkuTrack.ApiTypes
     {
         public unsafe AkuGameObject(IGameObject obj, IClientState clientState) {
             this.created_at = DateTimeOffset.Now;
-            this.t = obj.ObjectKind.ToString();
+            this.objectKind = obj.ObjectKind;
             this.pos = obj.Position;
             // Fixme actually load the unique id
             this.unique_ingame_id = null;
@@ -40,7 +41,7 @@ namespace AkuTrack.ApiTypes
         public AkuGameObject(DownloadGameObject dgo) {
             this.created_at = dgo.created_at;
             this.lastseen_at = dgo.last_seen_at;
-            this.t = dgo.objecttype;
+            this.objectKind = (ObjectKind)Enum.Parse(typeof(ObjectKind), dgo.objecttype);
             this.name = "<downloaded>";
             this.mid = dgo.map_id;
             this.zid = dgo.zone_id;
@@ -58,11 +59,13 @@ namespace AkuTrack.ApiTypes
         public DateTimeOffset? created_at { get; set; }
         [JsonIgnore]
         public DateTimeOffset? lastseen_at { get; set; }
-        public string t { get; set; }
+        public string t { get { return objectKind.ToString(); } }
         [JsonIgnore]
         public string name { get; set; }
         [JsonIgnore]
         public Vector4 tint { get; set; } = new Vector4(1f, 1f, 1f, 1f);
+        [JsonIgnore]
+        public ObjectKind objectKind { get; set;  }
         public uint mid { get; set; }
         public uint zid { get; set; }
         public Vector3 pos { get; set; }
