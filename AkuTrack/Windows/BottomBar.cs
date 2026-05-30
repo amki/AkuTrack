@@ -1,4 +1,5 @@
 using AkuTrack.ApiTypes;
+using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -16,17 +17,23 @@ namespace AkuTrack.Windows
     public class BottomBar
     {
         private readonly IPluginLog log;
+        private readonly IClientState clientState;
         private readonly Configuration configuration;
+        private readonly MapStateManager mapStateManager;
         private readonly ConfigWindow configWindow;
         private readonly SearchWindow searchWindow;
         public BottomBar(IPluginLog log,
+            IClientState clientState,
             ConfigWindow configWindow,
             SearchWindow searchWindow,
-            Configuration configuration) {
+            Configuration configuration,
+            MapStateManager mapStateManager) {
             this.log = log;
+            this.clientState = clientState;
             this.configWindow = configWindow;
             this.searchWindow = searchWindow;
             this.configuration = configuration;
+            this.mapStateManager = mapStateManager;
         }
         public unsafe void Draw(bool isMapHovered, Vector2 currentMapPixelSize, Vector2 DrawPosition, Vector2 DrawOffset, float Scale)
         {
@@ -36,6 +43,11 @@ namespace AkuTrack.Windows
                 ImGui.SetCursorPos(ImGui.GetContentRegionMax() - bottomBarSize);
                 using var childBackgroundStyle = ImRaii.PushColor(ImGuiCol.ChildBg, Vector4.Zero with { W = 0.33f });
                 using var bottomBar = ImRaii.Child("bottom_child", bottomBarSize);
+                if (ImGui.Button("Sync"))
+                {
+                    mapStateManager.SwitchMap(clientState.MapId);
+                }
+                ImGui.SameLine();
                 if (ImGui.Button("Config"))
                 {
                     configWindow.Toggle();

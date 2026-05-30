@@ -40,6 +40,7 @@ public class MapWindow : Window, IDisposable
 {
     private readonly Plugin plugin;
     private readonly Configuration configuration;
+    private readonly MapStateManager mapStateManager;
     private readonly ObjTrackManager objTrackManager;
     private readonly UploadManager uploadManager;
     private readonly WindowSystem windowSystem;
@@ -56,18 +57,25 @@ public class MapWindow : Window, IDisposable
     public Vector2 DrawPosition { get; private set; }
     private Vector2 lastWindowSize;
     private bool isDragStarted = false;
-    private IDalamudTextureWrap? currentTexture;
-    private Lumina.Excel.Sheets.Map currentMap;
-    public float ZoomSpeed = 0.25f;
+
+    private IDalamudTextureWrap? blendedTexture;
+    private uint lastRenderedMapId;
+    private bool isBlendedTexture;
+    private string currentMapBgPath;
+    private string currentMapFgPath;
+
     private Vector2 currentMapPixelSize = new(0, 0);
     private Vector2 currentMapScreenPosition = new(0, 0);
 
+    public float ZoomSpeed = 0.25f;
+
     private List<AkuGameObject> clickedObjects = new();
+    private List<Lumina.Excel.Sheets.MapMarker> clickedMarkers = new();
 
     private readonly MapContextMenu mapContextMenu = new();
     private readonly BottomBar bottomBar;
 
-    public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
+    
 
     public enum IconIds : int {
         Aetheryte = 60453,
@@ -96,6 +104,7 @@ public class MapWindow : Window, IDisposable
     public MapWindow(
         Plugin plugin,
         Configuration configuration,
+        MapStateManager mapStateManager,
         ObjTrackManager objTrackManager,
         UploadManager uploadManager,
         BottomBar bottomBar,
@@ -110,6 +119,7 @@ public class MapWindow : Window, IDisposable
         : base("AkuTrack - Map##akutrack_map", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         this.plugin = plugin;
+        this.mapStateManager = mapStateManager;
         this.configuration = configuration;
         this.log = log;
         this.dataManager = dataManager;
@@ -131,7 +141,7 @@ public class MapWindow : Window, IDisposable
     public void Dispose() { }
 
     public override void OnOpen() {
-        currentMap = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().GetRow(clientState.MapId);
+        
         if (!configuration.CenterOnPlayerWhenOpening)
         {
             return;
@@ -140,9 +150,8 @@ public class MapWindow : Window, IDisposable
         CenterOnLocalPlayer();
     }
 
-    public unsafe override void Draw()
+    public override void Draw()
     {
-        currentMap = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().GetRow(clientState.MapId);
         UpdateDrawOffset();
 
         HoveredFlags = HoverFlags.Nothing;
@@ -173,12 +182,14 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapElements() {
-        if (clickedObjects.Count > 0)
+        if (clickedObjects.Count > 0 || clickedMarkers.Count > 0)
         {
-            DrawAkuObjectContextMenu(clickedObjects);
+            DrawAkuObjectContextMenu(clickedObjects, clickedMarkers);
             if(!ImGui.IsPopupOpen("AkuTrack_AkuObject_Context_Menu")) {
-                if(clickedObjects.Count > 0)
+                if (clickedObjects.Count > 0)
                     clickedObjects.Clear();
+                if(clickedMarkers.Count > 0)
+                    clickedMarkers.Clear();
             }
         }
         DrawMapBackground();
@@ -189,7 +200,7 @@ public class MapWindow : Window, IDisposable
 
         if (configuration.DrawRemoteMarker)
         {
-            foreach (var o in downloadList)
+            foreach (var o in objTrackManager.downloadList)
             {
                 if (!objTrackManager.seenList.ContainsKey(o.Key))
                     DrawAkuGameObject(o.Value);
@@ -197,7 +208,7 @@ public class MapWindow : Window, IDisposable
         }
 
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
-        if (currentMap.RowId == clientState.MapId)
+        if (mapStateManager.currentMap.RowId == clientState.MapId)
         {
             if (objectTable.LocalPlayer is { } localPlayer)
             {
@@ -216,7 +227,7 @@ public class MapWindow : Window, IDisposable
         
         try
         {
-            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(currentMap.MapMarkerRange);
+            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(mapStateManager.currentMap.MapMarkerRange);
             foreach (var row in rows)
             {
                 if(IsMapMarker(row.Icon)) {
@@ -231,12 +242,8 @@ public class MapWindow : Window, IDisposable
                 DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
                 if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
                 {
-                    if(row.Icon == (int)IconIds.MapChanger) {
-                        log.Debug($"Change map!");
-                        if (row.DataKey.TryGetValue<Lumina.Excel.Sheets.Map>(out var dataKeyMap)) {
-                            log.Debug($"Found map {dataKeyMap.PlaceName.Value.Name.ToString()}");
-                        }
-                    }
+                    ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+                    clickedMarkers.Add(row);
                 }
             }
         } catch(ArgumentOutOfRangeException) {
@@ -246,23 +253,33 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapBackground() {
-        var idSplits = currentMap.Id.ToString().Split('/');
-        string mapBgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}m_m.tex";
-        string mapFgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}_m.tex";
-        // FIXME: ARR housing areas have black bg textures that need to be ignored...
-        if (currentMap.RowId == 192 || currentMap.RowId == 193 || currentMap.RowId == 194)
-            mapBgPath = "";
-        //log.Debug($"Drawing map BG: {mapBgPath} || FG: {mapFgPath}");
-        //log.Debug($"OG Paths BG: {AgentMap.Instance()->SelectedMapBgPath} || FG: {AgentMap.Instance()->SelectedMapPath}");
-        currentTexture?.Dispose();
-        var loadedTexture = LoadTexture(mapBgPath, mapFgPath);
-        if (loadedTexture is not null)
+        if (mapStateManager.currentMap.RowId != lastRenderedMapId)
         {
-            currentTexture = loadedTexture;
+            var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
+            currentMapBgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}m_m.tex";
+            currentMapFgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}_m.tex";
+            // FIXME: ARR housing areas have black bg textures that need to be ignored...
+            if (mapStateManager.currentMap.RowId == 192 || mapStateManager.currentMap.RowId == 193 || mapStateManager.currentMap.RowId == 194)
+                currentMapBgPath = "";
+            //log.Debug($"Drawing map BG: {mapBgPath} || FG: {mapFgPath}");
+            //log.Debug($"OG Paths BG: {AgentMap.Instance()->SelectedMapBgPath} || FG: {AgentMap.Instance()->SelectedMapPath}");
+            blendedTexture?.Dispose();
+            var loadedTexture = LoadTexture(currentMapBgPath, currentMapFgPath);
+            if (loadedTexture is not null)
+            {
+                isBlendedTexture = true;
+                blendedTexture = loadedTexture;
+            } else {
+                isBlendedTexture = false;
+            }
         }
-        else
-        {
-            currentTexture = textureProvider.GetFromGame(mapFgPath).GetWrapOrEmpty();
+
+        IDalamudTextureWrap? currentTexture = null;
+
+        if(isBlendedTexture) {
+            currentTexture = blendedTexture;
+        } else {
+            currentTexture = textureProvider.GetFromGame(currentMapFgPath).GetWrapOrEmpty();
 
         }
         if(currentTexture is null) {
@@ -271,58 +288,8 @@ public class MapWindow : Window, IDisposable
         }
         ImGui.SetCursorPos(DrawPosition);
         ImGui.Image(currentTexture.Handle, currentTexture.Size * Scale);
+        lastRenderedMapId = mapStateManager.currentMap.RowId;
     }
-
-    /*
-    private unsafe void DrawMapBackground()
-    {
-        if (AgentMap.Instance()->SelectedMapBgPath.Length is 0)
-        {
-            var gameMapPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
-            if (currentPath != gameMapPath)
-            {
-                log.Debug($"MapWindow: FLAT| Texture switched. oldMid {currentMap} new: {AgentMap.Instance()->SelectedMapId} old: {currentPath} new: {gameMapPath}");
-                if (gameMapPath.Contains("region"))
-                {
-                    log.Debug("REGION MAP DETECTED!");
-                    var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
-                    var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
-                    log.Debug($"BG Path: {vanillaBgPath} FG Path: {vanillaFgPath}");
-                }
-                currentPath = gameMapPath;
-                currentMap = AgentMap.Instance()->SelectedMapId;
-                FetchAkuGameObjectsFromAkuAPI(AgentMap.Instance()->SelectedMapId);
-            }
-            var texture = textureProvider.GetFromGame($"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex").GetWrapOrEmpty();
-
-            ImGui.SetCursorPos(DrawPosition);
-            ImGui.Image(texture.Handle, texture.Size * Scale);
-        }
-        else
-        {
-            var gameMapPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
-            if (currentPath != gameMapPath)
-            {
-                log.Debug($"MapWindow: BLEND| Texture switched. oldMid {currentMap} new: {AgentMap.Instance()->SelectedMapId} old: {currentPath} new: {gameMapPath}");
-                currentPath = gameMapPath;
-                currentMap = AgentMap.Instance()->SelectedMapId;
-                FetchAkuGameObjectsFromAkuAPI(AgentMap.Instance()->SelectedMapId);
-                //fogTexture = null;
-                blendedTexture?.Dispose();
-                var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
-                var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
-                log.Debug($"BG Path: {vanillaBgPath} FG Path: {vanillaFgPath}");
-                blendedTexture = LoadTexture($"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex", $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex");
-            }
-
-            if (blendedTexture is not null)
-            {
-                ImGui.SetCursorPos(DrawPosition);
-                ImGui.Image(blendedTexture.Handle, blendedTexture.Size * Scale);
-            }
-        }
-    }
-    */
 
     private IDalamudTextureWrap? LoadTexture(string bgPath, string fgPath)
     {
@@ -365,7 +332,7 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawAkuGameObject(AkuGameObject obj) {
-        if (obj.mid != currentMap.RowId)
+        if (obj.mid != mapStateManager.currentMap.RowId)
             return;
         if(!configuration.shouldDraw[obj.objectKind]) {
             return;
@@ -429,7 +396,7 @@ public class MapWindow : Window, IDisposable
         ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
     }
 
-    public void DrawAkuObjectContextMenu(List<AkuGameObject> objs)
+    public void DrawAkuObjectContextMenu(List<AkuGameObject> objs, List<Lumina.Excel.Sheets.MapMarker> markers)
     {
         using var contextMenu = ImRaii.ContextPopup("AkuTrack_AkuObject_Context_Menu");
         if (!contextMenu) return;
@@ -448,6 +415,17 @@ public class MapWindow : Window, IDisposable
                 var dw = ActivatorUtilities.CreateInstance<DetailsWindow>(plugin.serviceProvider, new object[] { obj });
                 windowSystem.AddWindow(dw);
                 dw.Toggle();
+            }
+        }
+        foreach(var mark in markers) {
+            if(ImGui.MenuItem($"MapMarker {mark.PlaceNameSubtext.Value.Name.ToString()}")) {
+                if (mark.DataKey.TryGetValue<Lumina.Excel.Sheets.Map>(out var dataKeyMap))
+                {
+                    log.Debug($"Found map {dataKeyMap.PlaceName.Value.Name.ToString()}");
+                    mapStateManager.SwitchMap(dataKeyMap.RowId);
+                } else {
+                    log.Debug("Tut nix beim klicken, sorry.");
+                }
             }
         }
     }
@@ -718,13 +696,13 @@ public class MapWindow : Window, IDisposable
     /// <summary>
     /// Unscaled Vector of SelectedX, SelectedY
     /// </summary>
-    public Vector2 GetRawMapOffsetVector() => new(currentMap.OffsetX, currentMap.OffsetY);
+    public Vector2 GetRawMapOffsetVector() => new(mapStateManager.currentMap.OffsetX, mapStateManager.currentMap.OffsetY);
     //public unsafe Vector2 GetRawMapOffsetVector() => new(AgentMap.Instance()->SelectedOffsetX * -1, AgentMap.Instance()->SelectedOffsetY * -1);
 
     /// <summary>
     /// Selected Scale Factor
     /// </summary>
-    public float GetMapScaleFactor() => currentMap.SizeFactor /  100;
+    public float GetMapScaleFactor() => mapStateManager.currentMap.SizeFactor /  100;
 
     /// <summary>
     /// 1024 vector, center offset vector
@@ -743,75 +721,4 @@ public class MapWindow : Window, IDisposable
 
         return false;
     }
-
-    private async void FetchAkuGameObjectsFromAkuAPI(uint mid)
-    {
-        await Task.Run(async () =>
-        {
-            var objs = await uploadManager.DownloadMapContentFromAPI(mid);
-            downloadList.Clear();
-            foreach (var obj in objs)
-            {
-                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
-                {
-                    try
-                    {
-                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
-                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
-                    }
-                    catch (ArgumentOutOfRangeException)
-                    {
-                        log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
-                    }
-                }
-                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
-                {
-                    if (obj.nid == null)
-                        continue;
-                    try
-                    {
-                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
-                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
-                    }
-                    catch (ArgumentOutOfRangeException)
-                    {
-                        log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
-                    }
-                }
-                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
-                {
-                    try
-                    {
-                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
-                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
-                    }
-                    catch (ArgumentOutOfRangeException)
-                    {
-                        log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
-                    }
-                }
-                if(obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint) {
-                    try
-                    {
-                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>(clientState.ClientLanguage).GetRow(obj.bid);
-                        //FIXME: Find the gathering node's name. It is in GatheringPointName but how to get there?
-                    }
-                    catch (ArgumentOutOfRangeException)
-                    {
-                        log.Debug($"{obj.t} ID {obj.bid} is not in range of GatheringPoint");
-                    }
-                }
-                if(obj.GetUniqueId() == null) {
-                    log.Debug($"ERROR: Could not GetUniqueId of obj.bid {obj.bid} name {obj.name}");
-                    continue;
-                }
-                if (!downloadList.TryAdd(obj.GetUniqueId()!, obj))
-                {
-                    log.Verbose($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
-                }
-            }
-            log.Debug($"{downloadList.Count} objects added to downloadList");
-        });
-    }
-
 }

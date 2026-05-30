@@ -66,6 +66,7 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<SearchWindow>()
             .AddSingleton<UploadManager>()
             .AddSingleton<ObjTrackManager>()
+            .AddSingleton<MapStateManager>()
             .AddSingleton<BottomBar>()
             .AddSingleton(windowSystem)
             .AddTransient<DetailsWindow>()

@@ -1,8 +1,11 @@
 using AkuTrack.ApiTypes;
 using Dalamud.Plugin.Services;
+using Dalamud.Utility;
+using FFXIVClientStructs.FFXIV.Client.Game.Fate;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -17,6 +20,7 @@ namespace AkuTrack.Managers
         private readonly IPluginLog log;
         private readonly string baseUrl = "https://akutrack.akurosia.org";
         private readonly HttpClient httpClient;
+
         public UploadManager(
             IPluginLog log
         ) {
@@ -89,7 +93,8 @@ namespace AkuTrack.Managers
                         return false;
                     }
                 });
-            } catch (HttpRequestException e)
+            }
+            catch (HttpRequestException e)
             {
                 log.Debug($"HttpRequestException: {e.Message} | {JsonConvert.SerializeObject(payload)}");
                 return false;

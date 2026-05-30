@@ -1,15 +1,18 @@
 using AkuTrack.ApiTypes;
 using Dalamud.Game.ClientState.Objects.Types;
-using FFXIVClientStructs;
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Dalamud.Utility;
+using FFXIVClientStructs;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Channels;
-using System.Security.Cryptography;
+using System.Threading.Tasks;
 
 namespace AkuTrack.Managers
 {
@@ -20,11 +23,14 @@ namespace AkuTrack.Managers
         private readonly IObjectTable objectTable;
         private readonly IFramework framework;
         private readonly IClientState clientState;
+        private readonly IDataManager dataManager;
         private readonly UploadManager uploadManager;
 
         public Dictionary<string, AkuGameObject> seenList = new();
         public Dictionary<ulong, AkuGameObject> seenObjTable = new();
         public List<AkuGameObject> toUpload = new();
+
+        public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
 
         private TimeSpan lastUpdate = new(0);
         private TimeSpan execDelay = new(0, 0, 1);
@@ -32,6 +38,7 @@ namespace AkuTrack.Managers
         public ObjTrackManager(
             IFramework framework,
             IClientState clientState,
+            IDataManager dataManager,
             IDalamudPluginInterface pluginInterface,
             IChatGui chat,
             IPluginLog log,
@@ -45,6 +52,7 @@ namespace AkuTrack.Managers
             this.objectTable = objectTable;
             this.framework = framework;
             this.clientState = clientState;
+            this.dataManager = dataManager;
             this.uploadManager = uploadManager;
 
             framework.Update += Tick;
@@ -167,6 +175,78 @@ namespace AkuTrack.Managers
             }
             log.Debug($"Obj changed in table old: {obj.Name}({obj.BaseId}) new: {obj.Name}/{obj.BaseId}");
             return true;
+        }
+
+        public async void FetchAkuGameObjectsFromAkuAPI(uint mid)
+        {
+            await Task.Run(async () =>
+            {
+                var objs = await uploadManager.DownloadMapContentFromAPI(mid);
+                downloadList.Clear();
+                foreach (var obj in objs)
+                {
+                    if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
+                    {
+                        try
+                        {
+                            var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
+                            obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
+                        }
+                    }
+                    if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
+                    {
+                        if (obj.nid == null)
+                            continue;
+                        try
+                        {
+                            var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
+                            obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
+                        }
+                    }
+                    if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
+                    {
+                        try
+                        {
+                            var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
+                            obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
+                        }
+                    }
+                    if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint)
+                    {
+                        try
+                        {
+                            var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>(clientState.ClientLanguage).GetRow(obj.bid);
+                            //FIXME: Find the gathering node's name. It is in GatheringPointName but how to get there?
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
+                            log.Debug($"{obj.t} ID {obj.bid} is not in range of GatheringPoint");
+                        }
+                    }
+                    if (obj.GetUniqueId() == null)
+                    {
+                        log.Debug($"ERROR: Could not GetUniqueId of obj.bid {obj.bid} name {obj.name}");
+                        continue;
+                    }
+                    if (!downloadList.TryAdd(obj.GetUniqueId()!, obj))
+                    {
+                        log.Verbose($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
+                    }
+                }
+                log.Debug($"{downloadList.Count} objects added to downloadList");
+            });
         }
     }
 }
