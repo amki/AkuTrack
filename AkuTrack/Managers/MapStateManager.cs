@@ -26,9 +26,13 @@ namespace AkuTrack.Managers
             SwitchMap(clientState.MapId);
         }
 
-        public void SwitchMap(uint mapId) {
+        public async void SwitchMap(uint mapId) {
             currentMap = dataManager.GetExcelSheet<Map>().GetRow(mapId);
-            objTrackManager.FetchAkuGameObjectsFromAkuAPI(mapId);
+            var objs = await objTrackManager.FetchAkuGameObjectsFromAkuAPI(mapId);
+            foreach (var obj in objs)
+            {
+                objTrackManager.downloadHashList.TryAdd(obj.GetUniqueId(), obj);    
+            }
         }
     }
 }

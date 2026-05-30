@@ -3,9 +3,12 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace AkuTrack.Managers
@@ -26,6 +29,8 @@ namespace AkuTrack.Managers
         public List<AkuGameObject> toUpload = new();
 
         public ConcurrentDictionary<string, AkuGameObject> downloadHashList = new();
+        public ConcurrentDictionary<string, AkuGameObject> currentMapDownloadHashList = new();
+        private bool isDownloadActive = false;
 
         private TimeSpan lastUpdate = new(0);
         private TimeSpan execDelay = new(0, 0, 1);
@@ -51,12 +56,25 @@ namespace AkuTrack.Managers
             this.uploadManager = uploadManager;
 
             framework.Update += Tick;
+            clientState.MapIdChanged += MapChanged;
+            MapChanged(clientState.MapId);
         }
 
         public void CleanSeen() {
             seenHashList.Clear();
             seenUIDList.Clear();
             toUpload.Clear();
+        }
+
+        private async void MapChanged(uint newMapId) {
+            log.Debug($"Player changed map to {newMapId}!");
+            isDownloadActive = true;
+            var objs = await FetchAkuGameObjectsFromAkuAPI(newMapId);
+            foreach (var obj in objs)
+            {
+                currentMapDownloadHashList.TryAdd(obj.GetUniqueId(), obj);
+            }
+            isDownloadActive = false;
         }
 
         private void Tick(IFramework framework)
@@ -74,11 +92,16 @@ namespace AkuTrack.Managers
             //log.Debug("Tick!");
             var aObjs = GetAkuGameObjects();
             liveAkuObjects = aObjs;
-            log.Debug($"{liveAkuObjects.Count} live");
+            //log.Debug($"{liveAkuObjects.Count} live");
+            if(isDownloadActive) {
+                return;
+            }
             var stepOne = FilterUploadIgnore(aObjs);
-            log.Debug($"{stepOne.Count} after stepOne");
-            var ups = FilterSeen(stepOne);
-            log.Debug($"{ups.Count} after seen filter");
+            //log.Debug($"{stepOne.Count} after stepOne");
+            var stepTwo = FilterSeen(stepOne);
+            //log.Debug($"{stepTwo.Count} after stepTwo");
+            var ups = FilterDownloaded(stepTwo);
+            //log.Debug($"{ups.Count} left");
 
             if (ups.Count > 0)
             {
@@ -112,6 +135,20 @@ namespace AkuTrack.Managers
             }
             return res;
         }
+
+        private List<AkuGameObject> FilterDownloaded(List<AkuGameObject> input) {
+            List<AkuGameObject> res = new();
+            foreach (var obj in input)
+            {
+                if(currentMapDownloadHashList.ContainsKey(obj.GetUniqueId())) {
+                    log.Debug($"Not uploading {obj.bid} ({obj.GetUniqueId()}) because it was in download.");
+                    continue;
+                }
+                res.Add(obj);
+            }
+            return res;
+        }
+
         private List<AkuGameObject> FilterUploadIgnore(List<AkuGameObject> input) {
             List<AkuGameObject> res = new();
             foreach (var obj in input)
@@ -218,76 +255,70 @@ namespace AkuTrack.Managers
             return true;
         }
 
-        public async void FetchAkuGameObjectsFromAkuAPI(uint mid)
+        public async Task<List<AkuGameObject>> FetchAkuGameObjectsFromAkuAPI(uint mid)
         {
-            await Task.Run(async () =>
+            List<AkuGameObject> res = new();
+            var objs = await uploadManager.DownloadMapContentFromAPI(mid);
+            foreach (var obj in objs)
             {
-                var objs = await uploadManager.DownloadMapContentFromAPI(mid);
-                downloadHashList.Clear();
-                foreach (var obj in objs)
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
                 {
-                    if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
+                    try
                     {
-                        try
-                        {
-                            var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
-                            obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
-                        }
-                        catch (ArgumentOutOfRangeException)
-                        {
-                            log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
-                        }
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
                     }
-                    if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
+                    catch (ArgumentOutOfRangeException)
                     {
-                        if (obj.nid == null)
-                            continue;
-                        try
-                        {
-                            var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
-                            obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
-                        }
-                        catch (ArgumentOutOfRangeException)
-                        {
-                            log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
-                        }
-                    }
-                    if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
-                    {
-                        try
-                        {
-                            var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
-                            obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
-                        }
-                        catch (ArgumentOutOfRangeException)
-                        {
-                            log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
-                        }
-                    }
-                    if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint)
-                    {
-                        try
-                        {
-                            var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>(clientState.ClientLanguage).GetRow(obj.bid);
-                            //FIXME: Find the gathering node's name. It is in GatheringPointName but how to get there?
-                        }
-                        catch (ArgumentOutOfRangeException)
-                        {
-                            log.Debug($"{obj.t} ID {obj.bid} is not in range of GatheringPoint");
-                        }
-                    }
-                    if (obj.GetUniqueId() == null)
-                    {
-                        log.Debug($"ERROR: Could not GetUniqueId of obj.bid {obj.bid} name {obj.name}");
-                        continue;
-                    }
-                    if (!downloadHashList.TryAdd(obj.GetUniqueId()!, obj))
-                    {
-                        log.Verbose($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
                     }
                 }
-                log.Debug($"{downloadHashList.Count} objects added to downloadList");
-            });
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
+                {
+                    if (obj.nid == null)
+                        continue;
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
+                    }
+                }
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
+                {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
+                    }
+                }
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint)
+                {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>(clientState.ClientLanguage).GetRow(obj.bid);
+                        //FIXME: Find the gathering node's name. It is in GatheringPointName but how to get there?
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of GatheringPoint");
+                    }
+                }
+                if (obj.GetUniqueId() == null)
+                {
+                    log.Debug($"ERROR: Could not GetUniqueId of obj.bid {obj.bid} name {obj.name}");
+                    continue;
+                }
+                res.Add(obj);
+            }
+            return res;
         }
     }
 }

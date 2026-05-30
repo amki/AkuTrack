@@ -281,7 +281,7 @@ public class MapWindow : Window, IDisposable
     {
         if (configuration.DrawRemoteMarker)
         {
-            foreach (var o in objTrackManager.downloadList)
+            foreach (var o in objTrackManager.downloadHashList)
             {
                 if (!objTrackManager.seenHashList.ContainsKey(o.Key))
                     DrawAkuGameObject(o.Value);

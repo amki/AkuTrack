@@ -116,7 +116,13 @@ public class MainWindow : Window, IDisposable
     }
 
     private void DrawAkuGameObject(AkuGameObject o) {
-        if (ImGui.CollapsingHeader($"[{o.bid}] {o.name}"))
+        string headerText = string.Empty;
+        if(objTrackManager.downloadHashList.ContainsKey(o.GetUniqueId())) {
+            headerText = $"[D] [{o.bid}] {o.name}";
+        } else {
+            headerText = $"[{o.bid}] {o.name}";
+        }
+        if (ImGui.CollapsingHeader(headerText))
         {
             ImGui.Text($"BaseId: {o.bid}");
             //var map = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().FirstOrDefault(m => m.TerritoryType.RowId == clientState.TerritoryType);
