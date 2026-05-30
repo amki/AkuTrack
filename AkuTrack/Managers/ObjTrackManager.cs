@@ -9,6 +9,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Channels;
@@ -26,8 +27,9 @@ namespace AkuTrack.Managers
         private readonly IDataManager dataManager;
         private readonly UploadManager uploadManager;
 
-        public Dictionary<string, AkuGameObject> seenList = new();
-        public Dictionary<ulong, AkuGameObject> seenObjTable = new();
+        public Dictionary<string, AkuGameObject> seenHashList = new();
+        public Dictionary<ulong, AkuGameObject> seenUIDList = new();
+        public List<AkuGameObject> liveAkuObjects = new();
         public List<AkuGameObject> toUpload = new();
 
         public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
@@ -59,8 +61,8 @@ namespace AkuTrack.Managers
         }
 
         public void CleanSeen() {
-            seenList.Clear();
-            seenObjTable.Clear();
+            seenHashList.Clear();
+            seenUIDList.Clear();
             toUpload.Clear();
         }
 
@@ -77,10 +79,18 @@ namespace AkuTrack.Managers
         private async void DoUpdate(IFramework framework)
         {
             //log.Debug("Tick!");
-            var ups = LookForNewObjects();
+            var aObjs = GetAkuGameObjects();
+            liveAkuObjects = aObjs;
+            log.Debug($"{liveAkuObjects.Count} live");
+            var stepOne = FilterUploadIgnore(aObjs);
+            log.Debug($"{stepOne.Count} after stepOne");
+            var ups = FilterSeen(stepOne);
+            log.Debug($"{ups.Count} after seen filter");
+
             if (ups.Count > 0)
             {
                 toUpload.AddRange(ups);
+                /*
                 var res = await uploadManager.DoUpload("duckit/", toUpload);
                 //log.Debug($"Uploading was {res}");
                 if (res)
@@ -91,51 +101,88 @@ namespace AkuTrack.Managers
                 {
                     log.Debug($"Uploading failed!");
                 }
+                */
             }
         }
 
-        private List<AkuGameObject> LookForNewObjects()
-        {
-            List<AkuGameObject> objects = new();
-            foreach (var obj in objectTable)
-            {
-                // no players, mounts, minion pets, housing items, wings/umbrellas, retainers
-                if(obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc ||
-                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Mount ||
-                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion ||
-                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.HousingEventObject ||
-                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament ||
-                    obj.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer
-                    ) {
-                    continue;
-                }
-                if(obj is IBattleNpc bnpc) {
-                    if(bnpc.BattleNpcKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.Pet ||
-                        bnpc.BattleNpcKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.Buddy ||
-                        bnpc.BattleNpcKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.RaceChocobo ||
-                        bnpc.BattleNpcKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.NpcPartyMember) {
-                        continue;
-                    }
-                }
+        private List<AkuGameObject> GetAkuGameObjects() {
+            List<AkuGameObject> res = new();
+            foreach (var obj in objectTable) {
                 var uid = AkuGameObject.GetUniqueId(obj);
-                if(uid == null ) {
+                if (uid == null)
+                {
                     log.Debug($"ERROR: Could not GetUniqueId from obj.bid {obj.BaseId} name {obj.Name}");
                     continue;
                 }
-                // Check if this object has already been sent by us
-                if (seenList.ContainsKey(uid))
+                var aObj = new AkuGameObject(obj, clientState);
+                res.Add(aObj);
+            }
+            return res;
+        }
+        private List<AkuGameObject> FilterUploadIgnore(List<AkuGameObject> input) {
+            List<AkuGameObject> res = new();
+            foreach (var obj in input)
+            {
+                // no players, mounts, minion pets, housing items, wings/umbrellas, retainers
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Mount ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.HousingEventObject ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer
+                    )
                 {
-                    var oldObj = seenList[uid];
+                    continue;
+                }
+                if (obj.battleNpcSubKind is not null)
+                {
+                    if (obj.battleNpcSubKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.Pet ||
+                        obj.battleNpcSubKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.Buddy ||
+                        obj.battleNpcSubKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.RaceChocobo ||
+                        obj.battleNpcSubKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.NpcPartyMember)
+                    {
+                        continue;
+                    }
+                }
+                // Check if this object is owned by a player (e.g. a battlepet) or has been aggroed
+                var owner = objectTable.SearchById(obj.ownerId);
+                if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
+                {
+                    log.Debug($"Obj {obj.name} [{obj.bid}] is player owned. Not sending. @ x/y/z: {obj.pos.X}/{obj.pos.Y}/{obj.pos.Z}");
+                    continue;
+                }
+                res.Add(obj);
+            }
+            return res;
+        }
+
+        private List<AkuGameObject> FilterSeen(List<AkuGameObject> input)
+        {
+            List<AkuGameObject> objects = new();
+            foreach (var obj in input)
+            {
+                ///
+                /// Check if we know the hash of this obj already
+                ///
+
+                var uid = obj.GetUniqueId();
+                if(uid == null) {
+                    log.Error($"Something terrible happened! -> uid was null for {obj.bid}");
+                    continue;
+                }
+                if (seenHashList.ContainsKey(uid))
+                {
+                    var oldObj = seenHashList[uid];
                     if (uid != oldObj.GetUniqueId())
                     {
                         log.Error($"Something terrible happened! -> Check {uid} but seenList fetches {oldObj.GetUniqueId()}");
                     }
-                    if (obj.ObjectKind.ToString() != oldObj.t || obj.BaseId != oldObj.bid)
+                    if (obj.objectKind.ToString() != oldObj.t || obj.bid != oldObj.bid)
                     {
                         log.Error($"Something terrible happened! oldObj and obj:");
-                        log.Error($"{oldObj.t} || {obj.ObjectKind.ToString()}");
+                        log.Error($"{oldObj.t} || {obj.objectKind.ToString()}");
                         log.Error($"{oldObj.mid} || {clientState.MapId}");
-                        log.Error($"{oldObj.bid} || {obj.BaseId}");
+                        log.Error($"{oldObj.bid} || {obj.bid}");
                     }
                     if(obj is ICharacter c) {
                         if(c.NameId != oldObj.nid) {
@@ -145,35 +192,36 @@ namespace AkuTrack.Managers
                     }
                     continue;
                 }
-                // Check if this object is owned by a player (e.g. a battlepet) or has been aggroed
-                var owner = objectTable.SearchById(obj.OwnerId);
-                if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
-                {
-                    log.Debug($"Obj {obj.Name} [{obj.BaseId}] is player owned. Not sending. @ x/y/z: {obj.Position.X}/{obj.Position.Y}/{obj.Position.Z}");
+
+                ///
+                /// End hash check
+                ///
+
+                if(obj.unique_ingame_id is null) {
+                    log.Error("Something terrible happened! AkuGameObject without unique id.");
                     continue;
                 }
-
-                var upObj = new AkuGameObject(obj, clientState);
 
                 // Check if there has been an object in this slot already and if it is likely still the same one but has moved (moving changes the uid hash)
-                if (seenObjTable.ContainsKey(obj.GameObjectId) && !HasTableContentChanged(obj, upObj)) {
-                    //log.Debug($"Obj {obj.GameObjectId} has moved but was already sent.");
+                if (seenUIDList.ContainsKey((ulong)obj.unique_ingame_id)) {
+                    var oldObj = seenUIDList[(ulong)obj.unique_ingame_id];
+                    if(!HasTableContentChanged(oldObj, obj))
                     continue;
                 }
-                seenList.Add(uid, upObj);
+                seenHashList.Add(uid, obj);
                 // Remove here because it could also be that the go was here and changed
-                seenObjTable.Remove(obj.GameObjectId);
-                seenObjTable.Add(obj.GameObjectId, upObj);
-                objects.Add(upObj);
+                seenUIDList.Remove((ulong)obj.unique_ingame_id);
+                seenUIDList.Add((ulong)obj.unique_ingame_id, obj);
+                objects.Add(obj);
             }
             return objects;
         }
 
-        private bool HasTableContentChanged(IGameObject obj, AkuGameObject akuObj) {
-            if(obj.BaseId == akuObj.bid && obj.ObjectKind.ToString() == akuObj.t) {
+        private bool HasTableContentChanged(AkuGameObject oldObj, AkuGameObject obj) {
+            if(obj.bid == oldObj.bid && obj.objectKind == oldObj.objectKind) {
                 return false;
             }
-            log.Debug($"Obj changed in table old: {obj.Name}({obj.BaseId}) new: {obj.Name}/{obj.BaseId}");
+            log.Debug($"Obj changed in table old: {obj.name}({obj.bid}) new: {obj.name}/{obj.bid}");
             return true;
         }
 

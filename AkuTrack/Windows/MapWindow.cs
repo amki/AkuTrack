@@ -131,6 +131,8 @@ public class MapWindow : Window, IDisposable
         this.windowSystem = windowSystem;
         this.textureProvider = textureProvider;
         this.textureSubstitutionProvider = textureSubstitutionProvider;
+        this.currentMapBgPath = "";
+        this.currentMapFgPath = "";
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(375, 330),
@@ -299,16 +301,16 @@ public class MapWindow : Window, IDisposable
         {
             foreach (var o in objTrackManager.downloadList)
             {
-                if (!objTrackManager.seenList.ContainsKey(o.Key))
+                if (!objTrackManager.seenHashList.ContainsKey(o.Key))
                     DrawAkuGameObject(o.Value);
             }
         }
 
         if (mapStateManager.currentMap.RowId == clientState.MapId)
         {
-            foreach (var o in objTrackManager.seenList)
+            foreach (var o in objTrackManager.liveAkuObjects)
             {
-                DrawAkuGameObject(o.Value);
+                DrawAkuGameObject(o);
             }
         }
     }
@@ -345,6 +347,22 @@ public class MapWindow : Window, IDisposable
                 {
                     continue;
                 }
+                if (mapStateManager.filterEnabled && mapStateManager.filterExpression != string.Empty)
+                {
+                    bool doDraw = false;
+                    /*
+                    if (row.DataKey.TryGetValue<Lumina.Excel.Sheets.PlaceName>(out var rowPlaceName)) {
+                        if (mapStateManager.filterExpression.Contains(rowPlaceName.Name.ToString()))
+                            doDraw = true;
+                    }
+                    */
+                    if (row.PlaceNameSubtext.Value.Name.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        doDraw = true;
+                    }
+                    if (!doDraw)
+                        continue;
+                }
                 var pos = new Vector2(row.X, row.Y);
                 //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
                 DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
@@ -367,6 +385,24 @@ public class MapWindow : Window, IDisposable
             return;
         if(!configuration.shouldDraw[obj.objectKind]) {
             return;
+        }
+        if(mapStateManager.filterEnabled && mapStateManager.filterExpression != string.Empty) {
+            bool doDraw = false;
+            if (obj.name.Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase) ||
+            obj.t.Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase) ||
+            obj.bid.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase))
+            {
+                doDraw = true;
+            }
+            if(obj.nid is not null && obj.nid.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase)) {
+                doDraw = true;
+            }
+            if (obj.npiid is not null && obj.npiid.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase))
+            {
+                doDraw = true;
+            }
+            if (!doDraw)
+                return;
         }
         if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
         {
@@ -445,7 +481,7 @@ public class MapWindow : Window, IDisposable
             }
         }
         foreach(var mark in markers) {
-            if(ImGui.MenuItem($"MapMarker {mark.PlaceNameSubtext.Value.Name.ToString()}")) {
+            if(ImGui.MenuItem($"MapMarker ({mark.RowId}.{mark.SubrowId}) {mark.PlaceNameSubtext.Value.Name.ToString()}")) {
                 if (mark.DataKey.TryGetValue<Lumina.Excel.Sheets.Map>(out var dataKeyMap))
                 {
                     log.Debug($"Found map {dataKeyMap.PlaceName.Value.Name.ToString()}");

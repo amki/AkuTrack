@@ -63,7 +63,7 @@ public class MainWindow : Window, IDisposable
             // Check if this child is drawing
             if (child.Success)
             {
-                ImGui.Text($"I have seen {objTrackManager.seenList.Count} objects since last reset.");
+                ImGui.Text($"I have seen {objTrackManager.seenHashList.Count} objects since last reset.");
 
                 ImGuiHelpers.ScaledDummy(20.0f);
 
@@ -96,8 +96,8 @@ public class MainWindow : Window, IDisposable
                 {
                     DrawAkuGameObject(o);
                 }
-                ImGui.Text($"Seen objects [{objTrackManager.seenList.Count}]:");
-                foreach (var o in objTrackManager.seenList)
+                ImGui.Text($"Seen objects [{objTrackManager.seenHashList.Count}]:");
+                foreach (var o in objTrackManager.seenHashList)
                 {
                     DrawAkuGameObject(o.Value);
                 }

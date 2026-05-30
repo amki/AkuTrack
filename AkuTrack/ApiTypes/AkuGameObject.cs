@@ -21,13 +21,14 @@ namespace AkuTrack.ApiTypes
             this.objectKind = obj.ObjectKind;
             this.pos = obj.Position;
             // Fixme actually load the unique id
-            this.unique_ingame_id = null;
+            this.unique_ingame_id = obj.GameObjectId;
             this.bid = obj.BaseId;
             this.hr = obj.HitboxRadius;
             this.name = obj.Name.ToString();
             this.mid = clientState.MapId;
             this.zid = clientState.TerritoryType;
             this.r = obj.Rotation;
+            this.ownerId = obj.OwnerId;
 
             if (obj is ICharacter c)
             {
@@ -35,6 +36,10 @@ namespace AkuTrack.ApiTypes
                 FFXIVClientStructs.FFXIV.Client.Game.Character.Character* chr = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)c.Address;
                 this.moid = chr->ModelContainer.ModelCharaId;
                 this.npiid = chr->NamePlateIconId;
+            }
+
+            if(obj is IBattleNpc bnpc) {
+                this.battleNpcSubKind = bnpc.BattleNpcKind;
             }
         }
 
@@ -66,6 +71,10 @@ namespace AkuTrack.ApiTypes
         public bool isDownloaded { get; set; } = false;
         [JsonIgnore]
         public ObjectKind objectKind { get; set;  }
+        [JsonIgnore]
+        public BattleNpcSubKind? battleNpcSubKind { get; set; }
+        [JsonIgnore]
+        public uint ownerId { get; set; }
         public uint mid { get; set; }
         public uint zid { get; set; }
         public Vector3 pos { get; set; }
