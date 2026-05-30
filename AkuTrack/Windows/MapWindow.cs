@@ -636,9 +636,13 @@ public class MapWindow : Window, IDisposable
                 if (aetheryte.AethernetName.Value.Name.ToString() != string.Empty && aetheryte.PlaceName.Value.Name.ToString() == string.Empty)
                 {
                     DrawIcon(60430, obj.pos, 3.14f, obj.tint);
+                    return;
+                }
+                else
+                {
+                    DrawIcon(60453, obj.pos, 3.14f, obj.tint);
                 }
             }
-            DrawIcon(60453, obj.pos, 3.14f, obj.tint);
         }
         else if (obj.t == "GatheringPoint")
         {
