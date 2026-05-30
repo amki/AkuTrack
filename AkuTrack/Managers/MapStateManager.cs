@@ -1,11 +1,5 @@
-using AkuTrack.ApiTypes;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Numerics;
-using System.Text;
 
 namespace AkuTrack.Managers
 {

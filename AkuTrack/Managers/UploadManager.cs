@@ -1,11 +1,7 @@
 using AkuTrack.ApiTypes;
 using Dalamud.Plugin.Services;
-using Dalamud.Utility;
-using FFXIVClientStructs.FFXIV.Client.Game.Fate;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;

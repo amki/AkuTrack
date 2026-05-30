@@ -3,16 +3,9 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
-using FFXIVClientStructs;
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Numerics;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace AkuTrack.Managers
@@ -32,7 +25,7 @@ namespace AkuTrack.Managers
         public List<AkuGameObject> liveAkuObjects = new();
         public List<AkuGameObject> toUpload = new();
 
-        public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
+        public ConcurrentDictionary<string, AkuGameObject> downloadHashList = new();
 
         private TimeSpan lastUpdate = new(0);
         private TimeSpan execDelay = new(0, 0, 1);
@@ -206,7 +199,7 @@ namespace AkuTrack.Managers
                 if (seenUIDList.ContainsKey((ulong)obj.unique_ingame_id)) {
                     var oldObj = seenUIDList[(ulong)obj.unique_ingame_id];
                     if(!HasTableContentChanged(oldObj, obj))
-                    continue;
+                        continue;
                 }
                 seenHashList.Add(uid, obj);
                 // Remove here because it could also be that the go was here and changed
@@ -230,7 +223,7 @@ namespace AkuTrack.Managers
             await Task.Run(async () =>
             {
                 var objs = await uploadManager.DownloadMapContentFromAPI(mid);
-                downloadList.Clear();
+                downloadHashList.Clear();
                 foreach (var obj in objs)
                 {
                     if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
@@ -288,12 +281,12 @@ namespace AkuTrack.Managers
                         log.Debug($"ERROR: Could not GetUniqueId of obj.bid {obj.bid} name {obj.name}");
                         continue;
                     }
-                    if (!downloadList.TryAdd(obj.GetUniqueId()!, obj))
+                    if (!downloadHashList.TryAdd(obj.GetUniqueId()!, obj))
                     {
                         log.Verbose($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
                     }
                 }
-                log.Debug($"{downloadList.Count} objects added to downloadList");
+                log.Debug($"{downloadHashList.Count} objects added to downloadList");
             });
         }
     }

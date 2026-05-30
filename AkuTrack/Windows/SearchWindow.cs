@@ -1,20 +1,11 @@
-using AkuTrack.ApiTypes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures;
-using Dalamud.Interface.Utility;
-using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using Dalamud.Utility;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using Lumina.Excel.Sheets;
-using Lumina.Excel.Sheets.Experimental;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Text;
 
 namespace AkuTrack.Windows
 {

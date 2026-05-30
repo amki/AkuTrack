@@ -1,38 +1,20 @@
 using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Game;
-using Dalamud.Game.ClientState.Objects.Types;
-using Dalamud.Game.Text.SeStringHandling;
-using Dalamud.Interface.FontIdentifier;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
-using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Data.Files;
-using Lumina.Excel.Sheets;
-using Lumina.Excel.Sheets.Experimental;
-using Lumina.Models.Materials;
 using Microsoft.Extensions.DependencyInjection;
-using Serilog;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Numerics;
-using System.Reflection.Metadata.Ecma335;
-using System.Threading;
 using System.Threading.Tasks;
-using static Lumina.Data.Parsing.Layer.LayerCommon;
 
 namespace AkuTrack.Windows;
 

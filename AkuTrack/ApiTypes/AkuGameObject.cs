@@ -1,14 +1,9 @@
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Component.GUI;
-using FFXIVClientStructs.Havok.Common.Base.Types;
 using Newtonsoft.Json;
-using Serilog;
 using System;
-using System.Collections.Generic;
 using System.Numerics;
-using System.Runtime.ConstrainedExecution;
 using System.Security.Cryptography;
 using System.Text;
 

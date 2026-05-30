@@ -1,17 +1,11 @@
-using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin.Services;
-using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using Serilog;
 using System;
-using System.Collections.Generic;
 using System.Numerics;
-using System.Text;
-using static FFXIVClientStructs.FFXIV.Client.Graphics.Kernel.VertexShader;
 
 namespace AkuTrack.Windows
 {

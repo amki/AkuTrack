@@ -6,7 +6,6 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Microsoft.Extensions.DependencyInjection;
-using System.IO;
 
 namespace AkuTrack;
 

@@ -1,17 +1,12 @@
 using AkuTrack.ApiTypes;
-using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.FontIdentifier;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using Lumina.Excel.Sheets;
-using Serilog;
 using System;
-using System.Linq;
 using System.Numerics;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace AkuTrack.Windows;
 

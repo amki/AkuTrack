@@ -6,15 +6,8 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using Lumina.Excel.Sheets;
-using Lumina.Excel.Sheets.Experimental;
-using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Linq;
 using System.Numerics;
-using System.Threading;
 
 namespace AkuTrack.Windows;
 
