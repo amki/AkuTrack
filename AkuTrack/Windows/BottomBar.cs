@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
+using static FFXIVClientStructs.FFXIV.Client.Graphics.Kernel.VertexShader;
 
 namespace AkuTrack.Windows
 {
@@ -22,6 +23,7 @@ namespace AkuTrack.Windows
         private readonly MapStateManager mapStateManager;
         private readonly ConfigWindow configWindow;
         private readonly SearchWindow searchWindow;
+
         public BottomBar(IPluginLog log,
             IClientState clientState,
             ConfigWindow configWindow,
@@ -43,9 +45,11 @@ namespace AkuTrack.Windows
                 ImGui.SetCursorPos(ImGui.GetContentRegionMax() - bottomBarSize);
                 using var childBackgroundStyle = ImRaii.PushColor(ImGuiCol.ChildBg, Vector4.Zero with { W = 0.33f });
                 using var bottomBar = ImRaii.Child("bottom_child", bottomBarSize);
-                if (ImGui.Button("Sync"))
-                {
-                    mapStateManager.SwitchMap(clientState.MapId);
+                if(mapStateManager.currentMap.RowId != clientState.MapId) {
+                    if (ImGui.Button("Sync"))
+                    {
+                        mapStateManager.SwitchMap(clientState.MapId);
+                    }
                 }
                 ImGui.SameLine();
                 if (ImGui.Button("Config"))
@@ -56,6 +60,16 @@ namespace AkuTrack.Windows
                 if (ImGui.Button("Search"))
                 {
                     searchWindow.Toggle();
+                }
+                ImGui.SameLine();
+                if(ImGui.Checkbox("Filter", ref mapStateManager.filterEnabled)) {
+
+                }
+                if (mapStateManager.filterEnabled)
+                {
+                    ImGui.SameLine();
+                    ImGui.SetNextItemWidth(180.0f);
+                    ImGui.InputTextWithHint("", "Search map", ref mapStateManager.filterExpression, 128);
                 }
 
                 if (true /*isMapHovered*/)

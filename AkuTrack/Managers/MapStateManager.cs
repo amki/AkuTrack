@@ -16,6 +16,9 @@ namespace AkuTrack.Managers
 
         private ObjTrackManager objTrackManager;
 
+        public string filterExpression = string.Empty;
+        public bool filterEnabled = false;
+
         public Map currentMap { get; private set; }
 
         public MapStateManager(

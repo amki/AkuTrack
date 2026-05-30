@@ -182,74 +182,16 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapElements() {
-        if (clickedObjects.Count > 0 || clickedMarkers.Count > 0)
-        {
-            DrawAkuObjectContextMenu(clickedObjects, clickedMarkers);
-            if(!ImGui.IsPopupOpen("AkuTrack_AkuObject_Context_Menu")) {
-                if (clickedObjects.Count > 0)
-                    clickedObjects.Clear();
-                if(clickedMarkers.Count > 0)
-                    clickedMarkers.Clear();
-            }
-        }
+        DrawContextMenu();
         DrawMapBackground();
         if (ImGui.IsItemHovered())
         {
             HoveredFlags |= HoverFlags.MapTexture;
         }
 
-        if (configuration.DrawRemoteMarker)
-        {
-            foreach (var o in objTrackManager.downloadList)
-            {
-                if (!objTrackManager.seenList.ContainsKey(o.Key))
-                    DrawAkuGameObject(o.Value);
-            }
-        }
-
-        // Only draw player and from ObjectTable if we are looking at the map we are currently in
-        if (mapStateManager.currentMap.RowId == clientState.MapId)
-        {
-            if (objectTable.LocalPlayer is { } localPlayer)
-            {
-                if (configuration.DrawCameraCone)
-                {
-                    DrawCameraCone(localPlayer.Position);
-                }
-
-                DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
-            }
-            foreach (var o in objTrackManager.seenList)
-            {
-                DrawAkuGameObject(o.Value);
-            }
-        }
-        
-        try
-        {
-            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(mapStateManager.currentMap.MapMarkerRange);
-            foreach (var row in rows)
-            {
-                if(IsMapMarker(row.Icon)) {
-                    continue;
-                }
-                if (row.X == 0 && row.Y == 0)
-                {
-                    continue;
-                }
-                var pos = new Vector2(row.X, row.Y);
-                //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
-                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
-                if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
-                {
-                    ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
-                    clickedMarkers.Add(row);
-                }
-            }
-        } catch(ArgumentOutOfRangeException) {
-            // FIXME: How to get markers from region maps?!?
-            //log.Debug($"Could not find Markers for Territory {currentTerritory}");
-        }
+        DrawAkuObjects();
+        DrawPlayerAndCone();
+        DrawMapMarkers();
     }
 
     private void DrawMapBackground() {
@@ -331,6 +273,95 @@ public class MapWindow : Window, IDisposable
         return dataManager.GetFile<TexFile>(path);
     }
 
+    private void DrawTooltip(AkuGameObject obj)
+    {
+        ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
+    }
+
+    private void DrawContextMenu()
+    {
+        if (clickedObjects.Count > 0 || clickedMarkers.Count > 0)
+        {
+            DrawAkuObjectContextMenu(clickedObjects, clickedMarkers);
+            if (!ImGui.IsPopupOpen("AkuTrack_AkuObject_Context_Menu"))
+            {
+                if (clickedObjects.Count > 0)
+                    clickedObjects.Clear();
+                if (clickedMarkers.Count > 0)
+                    clickedMarkers.Clear();
+            }
+        }
+    }
+
+    private void DrawAkuObjects()
+    {
+        if (configuration.DrawRemoteMarker)
+        {
+            foreach (var o in objTrackManager.downloadList)
+            {
+                if (!objTrackManager.seenList.ContainsKey(o.Key))
+                    DrawAkuGameObject(o.Value);
+            }
+        }
+
+        if (mapStateManager.currentMap.RowId == clientState.MapId)
+        {
+            foreach (var o in objTrackManager.seenList)
+            {
+                DrawAkuGameObject(o.Value);
+            }
+        }
+    }
+
+    private void DrawPlayerAndCone()
+    {
+        // Only draw player and from ObjectTable if we are looking at the map we are currently in
+        if (mapStateManager.currentMap.RowId == clientState.MapId)
+        {
+            if (objectTable.LocalPlayer is { } localPlayer)
+            {
+                if (configuration.DrawCameraCone)
+                {
+                    DrawCameraCone(localPlayer.Position);
+                }
+
+                DrawPlayerIcon(localPlayer.Position, localPlayer.Rotation);
+            }
+
+        }
+    }
+
+    private void DrawMapMarkers() {
+        try
+        {
+            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(mapStateManager.currentMap.MapMarkerRange);
+            foreach (var row in rows)
+            {
+                if (IsMapMarker(row.Icon))
+                {
+                    continue;
+                }
+                if (row.X == 0 && row.Y == 0)
+                {
+                    continue;
+                }
+                var pos = new Vector2(row.X, row.Y);
+                //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
+                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
+                if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+                {
+                    ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+                    clickedMarkers.Add(row);
+                }
+            }
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            // FIXME: How to get markers from region maps?!?
+            //log.Debug($"Could not find Markers for Territory {currentTerritory}");
+        }
+    }
+
     private void DrawAkuGameObject(AkuGameObject obj) {
         if (obj.mid != mapStateManager.currentMap.RowId)
             return;
@@ -390,10 +421,6 @@ public class MapWindow : Window, IDisposable
             DrawTooltip(obj);
             DrawIcon((int)IconIds.Hover, obj);
         }
-    }
-
-    private void DrawTooltip(AkuGameObject obj) {
-        ImGui.SetTooltip($"Created: {obj.created_at}\nLastSeen: {obj.lastseen_at}\n\nName: {obj.name}\nType: {obj.t}\nBaseID: {obj.bid}");
     }
 
     public void DrawAkuObjectContextMenu(List<AkuGameObject> objs, List<Lumina.Excel.Sheets.MapMarker> markers)
