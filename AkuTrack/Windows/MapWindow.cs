@@ -12,12 +12,13 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
 using Lumina.Excel.Sheets.Experimental;
+using Lumina.Models.Materials;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using System;
@@ -55,10 +56,8 @@ public class MapWindow : Window, IDisposable
     public Vector2 DrawPosition { get; private set; }
     private Vector2 lastWindowSize;
     private bool isDragStarted = false;
-    private IDalamudTextureWrap? blendedTexture;
-    private string currentPath = string.Empty;
-    private uint currentMap = 0;
-    private uint currentTerritory = 0;
+    private IDalamudTextureWrap? currentTexture;
+    private Lumina.Excel.Sheets.Map currentMap;
     public float ZoomSpeed = 0.25f;
     private Vector2 currentMapPixelSize = new(0, 0);
     private Vector2 currentMapScreenPosition = new(0, 0);
@@ -69,6 +68,27 @@ public class MapWindow : Window, IDisposable
     private readonly BottomBar bottomBar;
 
     public ConcurrentDictionary<string, AkuGameObject> downloadList = new();
+
+    public enum IconIds : int {
+        Aetheryte = 60453,
+        AethernetShard = 60430,
+        CompanyChest = 60460,
+        MarketBoard = 60570,
+        SummoningBell = 60425,
+        Treasure = 60354,
+        Unknown = 60515,
+        EventNpc = 60424,
+        EventObj = 60353,
+        BattleNpc = 60422,
+        Hover = 60429,
+        MapChanger = 60441
+    }
+    
+    public bool IsMapMarker(int iconid) {
+        if (iconid == (int)IconIds.Aetheryte || iconid == (int)IconIds.AethernetShard || iconid == (int)IconIds.SummoningBell || iconid == (int)IconIds.MarketBoard || iconid == (int)IconIds.CompanyChest)
+            return true;
+        return false;
+    }
 
     // We give this window a hidden ID using ##.
     // The user will see "My Amazing Window" as window title,
@@ -110,8 +130,8 @@ public class MapWindow : Window, IDisposable
 
     public void Dispose() { }
 
-    public override void OnOpen()
-    {
+    public override void OnOpen() {
+        currentMap = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().GetRow(clientState.MapId);
         if (!configuration.CenterOnPlayerWhenOpening)
         {
             return;
@@ -122,6 +142,7 @@ public class MapWindow : Window, IDisposable
 
     public unsafe override void Draw()
     {
+        currentMap = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().GetRow(clientState.MapId);
         UpdateDrawOffset();
 
         HoveredFlags = HoverFlags.Nothing;
@@ -165,9 +186,18 @@ public class MapWindow : Window, IDisposable
         {
             HoveredFlags |= HoverFlags.MapTexture;
         }
-        
+
+        if (configuration.DrawRemoteMarker)
+        {
+            foreach (var o in downloadList)
+            {
+                if (!objTrackManager.seenList.ContainsKey(o.Key))
+                    DrawAkuGameObject(o.Value);
+            }
+        }
+
         // Only draw player and from ObjectTable if we are looking at the map we are currently in
-        if (currentMap == clientState.MapId)
+        if (currentMap.RowId == clientState.MapId)
         {
             if (objectTable.LocalPlayer is { } localPlayer)
             {
@@ -183,27 +213,31 @@ public class MapWindow : Window, IDisposable
                 DrawAkuGameObject(o.Value);
             }
         }
-        if(configuration.DrawRemoteMarker) {
-            foreach (var o in downloadList)
-            {
-                if (!objTrackManager.seenList.ContainsKey(o.Key))
-                    DrawAkuGameObject(o.Value);
-            }
-        }
         
         try
         {
-            var t = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().GetRow(currentMap);
-            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(t.MapMarkerRange);
+            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(currentMap.MapMarkerRange);
             foreach (var row in rows)
             {
+                if(IsMapMarker(row.Icon)) {
+                    continue;
+                }
                 if (row.X == 0 && row.Y == 0)
                 {
                     continue;
                 }
                 var pos = new Vector2(row.X, row.Y);
                 //log.Debug($"Icon {row.Icon} to {pos} {row.RowOffset} |{row.PlaceNameSubtext.Value.Name}|");
-                //DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
+                DrawMapIcon(row.Icon, pos, 3.14f, row.PlaceNameSubtext.Value.Name.ToString(), row.SubtextOrientation);
+                if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+                {
+                    if(row.Icon == (int)IconIds.MapChanger) {
+                        log.Debug($"Change map!");
+                        if (row.DataKey.TryGetValue<Lumina.Excel.Sheets.Map>(out var dataKeyMap)) {
+                            log.Debug($"Found map {dataKeyMap.PlaceName.Value.Name.ToString()}");
+                        }
+                    }
+                }
             }
         } catch(ArgumentOutOfRangeException) {
             // FIXME: How to get markers from region maps?!?
@@ -211,6 +245,35 @@ public class MapWindow : Window, IDisposable
         }
     }
 
+    private void DrawMapBackground() {
+        var idSplits = currentMap.Id.ToString().Split('/');
+        string mapBgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}m_m.tex";
+        string mapFgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}_m.tex";
+        // FIXME: ARR housing areas have black bg textures that need to be ignored...
+        if (currentMap.RowId == 192 || currentMap.RowId == 193 || currentMap.RowId == 194)
+            mapBgPath = "";
+        //log.Debug($"Drawing map BG: {mapBgPath} || FG: {mapFgPath}");
+        //log.Debug($"OG Paths BG: {AgentMap.Instance()->SelectedMapBgPath} || FG: {AgentMap.Instance()->SelectedMapPath}");
+        currentTexture?.Dispose();
+        var loadedTexture = LoadTexture(mapBgPath, mapFgPath);
+        if (loadedTexture is not null)
+        {
+            currentTexture = loadedTexture;
+        }
+        else
+        {
+            currentTexture = textureProvider.GetFromGame(mapFgPath).GetWrapOrEmpty();
+
+        }
+        if(currentTexture is null) {
+            log.Debug("Trying to draw null texture... Skip!");
+            return;
+        }
+        ImGui.SetCursorPos(DrawPosition);
+        ImGui.Image(currentTexture.Handle, currentTexture.Size * Scale);
+    }
+
+    /*
     private unsafe void DrawMapBackground()
     {
         if (AgentMap.Instance()->SelectedMapBgPath.Length is 0)
@@ -224,11 +287,10 @@ public class MapWindow : Window, IDisposable
                     log.Debug("REGION MAP DETECTED!");
                     var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
                     var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
-                    log.Debug($"BG Path: {vanillaBgPath} sFG Path: {vanillaFgPath}");
+                    log.Debug($"BG Path: {vanillaBgPath} FG Path: {vanillaFgPath}");
                 }
                 currentPath = gameMapPath;
                 currentMap = AgentMap.Instance()->SelectedMapId;
-                currentTerritory = AgentMap.Instance()->SelectedTerritoryId;
                 FetchAkuGameObjectsFromAkuAPI(AgentMap.Instance()->SelectedMapId);
             }
             var texture = textureProvider.GetFromGame($"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex").GetWrapOrEmpty();
@@ -244,11 +306,13 @@ public class MapWindow : Window, IDisposable
                 log.Debug($"MapWindow: BLEND| Texture switched. oldMid {currentMap} new: {AgentMap.Instance()->SelectedMapId} old: {currentPath} new: {gameMapPath}");
                 currentPath = gameMapPath;
                 currentMap = AgentMap.Instance()->SelectedMapId;
-                currentTerritory = AgentMap.Instance()->SelectedTerritoryId;
                 FetchAkuGameObjectsFromAkuAPI(AgentMap.Instance()->SelectedMapId);
                 //fogTexture = null;
                 blendedTexture?.Dispose();
-                blendedTexture = LoadTexture();
+                var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
+                var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
+                log.Debug($"BG Path: {vanillaBgPath} FG Path: {vanillaFgPath}");
+                blendedTexture = LoadTexture($"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex", $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex");
             }
 
             if (blendedTexture is not null)
@@ -258,18 +322,16 @@ public class MapWindow : Window, IDisposable
             }
         }
     }
+    */
 
-    private unsafe IDalamudTextureWrap? LoadTexture()
+    private IDalamudTextureWrap? LoadTexture(string bgPath, string fgPath)
     {
-        var vanillaBgPath = $"{AgentMap.Instance()->SelectedMapBgPath.ToString()}.tex";
-        var vanillaFgPath = $"{AgentMap.Instance()->SelectedMapPath.ToString()}.tex";
 
-        var bgFile = GetTexFile(vanillaBgPath);
-        var fgFile = GetTexFile(vanillaFgPath);
+        var bgFile = GetTexFile(bgPath);
+        var fgFile = GetTexFile(fgPath);
 
         if (bgFile is null || fgFile is null)
         {
-            log.Warning("Failed to load map textures");
             return null;
         }
 
@@ -303,39 +365,38 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawAkuGameObject(AkuGameObject obj) {
-        if (obj.mid != currentMap)
+        if (obj.mid != currentMap.RowId)
             return;
         if(!configuration.shouldDraw[obj.objectKind]) {
             return;
         }
         if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
         {
-            DrawIcon(60424, obj.pos, obj.r, obj.tint);
+            DrawIcon((int)IconIds.EventNpc, obj);
         }
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
         {
             if (obj.bid == 2000401) // summoning bell
-                DrawIcon(60425, obj.pos, obj.r, obj.tint);
+                DrawIcon((int)IconIds.SummoningBell, obj);
             else if (obj.bid == 2000402) // market board
-                DrawIcon(60570, obj.pos, obj.r, obj.tint);
+                DrawIcon((int)IconIds.MarketBoard, obj);
             else if (obj.bid == 2000470) // company chest
-                DrawIcon(60460, obj.pos, obj.r, obj.tint);
+                DrawIcon((int)IconIds.CompanyChest, obj);
             else
-                DrawIcon(60353, obj.pos, obj.r, obj.tint);
+                DrawIcon((int)IconIds.EventObj, obj);
         }
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
         {
-            DrawIcon(60422, obj.pos, obj.r, obj.tint);
+            DrawIcon((int)IconIds.BattleNpc, obj);
         }
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte)
         {
             if(dataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().TryGetRow(obj.bid, out var aetheryte)) {
                 if (aetheryte.AethernetName.Value.Name.ToString() != string.Empty && aetheryte.PlaceName.Value.Name.ToString() == string.Empty)
                 {
-                    DrawIcon(60430, obj.pos, 3.14f, obj.tint);
-                    return;
+                    DrawIcon((int)IconIds.AethernetShard, obj);
                 } else {
-                    DrawIcon(60453, obj.pos, 3.14f, obj.tint);
+                    DrawIcon((int)IconIds.Aetheryte, obj);
                 }
             }
         }
@@ -346,12 +407,12 @@ public class MapWindow : Window, IDisposable
                 log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");
                 return;
             }
-            DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj.pos, obj.r, obj.tint);
+            DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj);
         }
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure)
-            DrawIcon(60354, obj.pos, obj.r, obj.tint);
+            DrawIcon((int)IconIds.Treasure, obj);
         else
-            DrawIcon(60515, obj.pos, obj.r, obj.tint);
+            DrawIcon((int)IconIds.Unknown, obj);
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
@@ -360,7 +421,7 @@ public class MapWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
         {
             DrawTooltip(obj);
-            DrawIcon(60429, obj.pos, 3.14f, obj.tint);
+            DrawIcon((int)IconIds.Hover, obj);
         }
     }
 
@@ -391,11 +452,11 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void DrawIcon(int iconid, Vector3 position, float rotation, Vector4 tint)
+    private void DrawIcon(int iconid, AkuGameObject obj)
     {
         var texture = textureProvider.GetFromGameIcon(iconid).GetWrapOrEmpty();
 
-        var p = ((GetMapCoordinateFor3D(position)) * Scale) + DrawPosition - (texture.Size / 4.0f);
+        var p = ((GetMapCoordinateFor3D(obj.pos)) * Scale) + DrawPosition - (texture.Size / 4.0f);
 
         if (configuration.DrawDebugSquares)
         {
@@ -405,7 +466,10 @@ public class MapWindow : Window, IDisposable
         }
         ImGui.SetCursorPos(p);
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
-        ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, tint);
+        if (obj.isDownloaded && !IsMapMarker(iconid))
+            ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, new Vector4(0.5f, 0.5f, 0.5f, 0.5f));
+        else
+            ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     }
 
     private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation)
@@ -416,7 +480,7 @@ public class MapWindow : Window, IDisposable
             //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
         if (IsRegionIcon(iconid)) {
             var regionScaleFactor = 0.84f;
-            // FIXME: Rendering of region icons is somewhat broken
+            // FIXME: Shading of region icons is broken (they are white)
             var p = (position * Scale) + DrawPosition - (texture.Size * regionScaleFactor / 4.0f * Scale);
             ImGui.SetCursorPos(p);
             ImGui.Image(texture.Handle, texture.Size * regionScaleFactor / 2.0f * Scale);
@@ -444,6 +508,7 @@ public class MapWindow : Window, IDisposable
             if (text != string.Empty)
             {
                 var ap = p;
+                // FIXME: Map Icon Text is moved (left of marker, above marker, right of marker etc) on the ingame map whereas we render it just at the marker's position
                 /*
                 switch(subtextOrientation) {
                     case 1:
@@ -475,7 +540,7 @@ public class MapWindow : Window, IDisposable
        };
 
     public static bool IsDoubleHousingArea(int iconId) {
-        if (iconId == 63249 /* Goblet */ || iconId == 63210 /* Mist */ || iconId == 63228 /* Lavender Beds */ || iconId == 63383 /* Shirogane */)
+        if (iconId == 63249 /* Goblet */ || iconId == 63210 /* Mist */ || iconId == 63228 /* Lavender Beds */ || iconId == 63383 /* Shirogane */ || iconId == 63266 /* Empyreum */)
             return true;
         return false;
     }
@@ -636,29 +701,30 @@ public class MapWindow : Window, IDisposable
         return vectors;
     }
 
-    public static Vector2 GetMapCoordinateFor3D(Vector3 pos)
+    public Vector2 GetMapCoordinateFor3D(Vector3 pos)
     {
         var twoD = new Vector2(pos.X, pos.Z);
         var mapcoord = ((twoD + GetRawMapOffsetVector()) * GetMapScaleFactor()) + GetMapCenterOffsetVector();
         return mapcoord;
     }
-    public static Vector2 GetPlayerMapPosition(Vector3 vec) => new Vector2(vec.X, vec.Z) * GetMapScaleFactor();
+    public Vector2 GetPlayerMapPosition(Vector3 vec) => new Vector2(vec.X, vec.Z) * GetMapScaleFactor();
     private static Vector2 ImRotate(Vector2 v, float cosA, float sinA) => new(v.X * cosA - v.Y * sinA, v.X * sinA + v.Y * cosA);
 
     /// <summary>
     /// Offset Vector of SelectedX, SelectedY, scaled with SelectedSizeFactor
     /// </summary>
-    public static Vector2 GetMapOffsetVector() => GetRawMapOffsetVector() * GetMapScaleFactor();
+    public Vector2 GetMapOffsetVector() => GetRawMapOffsetVector() * GetMapScaleFactor();
 
     /// <summary>
     /// Unscaled Vector of SelectedX, SelectedY
     /// </summary>
-    public static unsafe Vector2 GetRawMapOffsetVector() => new(AgentMap.Instance()->SelectedOffsetX * -1, AgentMap.Instance()->SelectedOffsetY * -1);
+    public Vector2 GetRawMapOffsetVector() => new(currentMap.OffsetX, currentMap.OffsetY);
+    //public unsafe Vector2 GetRawMapOffsetVector() => new(AgentMap.Instance()->SelectedOffsetX * -1, AgentMap.Instance()->SelectedOffsetY * -1);
 
     /// <summary>
     /// Selected Scale Factor
     /// </summary>
-    public static unsafe float GetMapScaleFactor() => AgentMap.Instance()->SelectedMapSizeFactorFloat;
+    public float GetMapScaleFactor() => currentMap.SizeFactor /  100;
 
     /// <summary>
     /// 1024 vector, center offset vector
@@ -741,7 +807,7 @@ public class MapWindow : Window, IDisposable
                 }
                 if (!downloadList.TryAdd(obj.GetUniqueId()!, obj))
                 {
-                    log.Debug($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
+                    log.Verbose($"AkuAPI Download: Duplicate Key {obj.GetUniqueId()}");
                 }
             }
             log.Debug($"{downloadList.Count} objects added to downloadList");

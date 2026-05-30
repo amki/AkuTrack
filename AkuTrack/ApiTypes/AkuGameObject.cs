@@ -53,7 +53,7 @@ namespace AkuTrack.ApiTypes
             this.moid = dgo.moid;
             this.hr = dgo.hit_radius;
             this.nid = dgo.nid;
-            this.tint = new Vector4(0.5f, 0.5f, 0.5f, 0.5f);
+            this.isDownloaded = true;
         }
         [JsonIgnore]
         public DateTimeOffset? created_at { get; set; }
@@ -63,7 +63,7 @@ namespace AkuTrack.ApiTypes
         [JsonIgnore]
         public string name { get; set; }
         [JsonIgnore]
-        public Vector4 tint { get; set; } = new Vector4(1f, 1f, 1f, 1f);
+        public bool isDownloaded { get; set; } = false;
         [JsonIgnore]
         public ObjectKind objectKind { get; set;  }
         public uint mid { get; set; }
