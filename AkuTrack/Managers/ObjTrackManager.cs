@@ -70,6 +70,7 @@ namespace AkuTrack.Managers
             log.Debug($"Player changed map to {newMapId}!");
             isDownloadActive = true;
             var objs = await FetchAkuGameObjectsFromAkuAPI(newMapId);
+            currentMapDownloadHashList.Clear();
             foreach (var obj in objs)
             {
                 currentMapDownloadHashList.TryAdd(obj.GetUniqueId(), obj);
