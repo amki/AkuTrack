@@ -50,6 +50,11 @@ public class MapWindow : Window, IDisposable
     private bool isBlendedTexture;
     private string currentMapBgPath;
     private string currentMapFgPath;
+    private uint capturedAgentMapId;
+    private string capturedAgentMapBgPath = string.Empty;
+    private string capturedAgentMapFgPath = string.Empty;
+    private Vector2 capturedAgentRawMapOffset;
+    private float capturedAgentMapScaleFactor;
 
     private Vector2 currentMapPixelSize = new(0, 0);
     private Vector2 currentMapScreenPosition = new(0, 0);
@@ -142,6 +147,11 @@ public class MapWindow : Window, IDisposable
             return;
         }
 
+        capturedAgentMapId = agentMap->SelectedMapId;
+        capturedAgentMapFgPath = agentMap->SelectedMapPath.ToString();
+        capturedAgentMapBgPath = agentMap->SelectedMapBgPath.ToString();
+        capturedAgentRawMapOffset = new Vector2(agentMap->SelectedOffsetX * -1, agentMap->SelectedOffsetY * -1);
+        capturedAgentMapScaleFactor = agentMap->SelectedMapSizeFactorFloat;
         mapStateManager.SwitchMap(agentMap->SelectedMapId);
     }
 
@@ -250,14 +260,15 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapBackground() {
-        if (mapStateManager.currentMap.RowId != lastRenderedMapId)
+        RefreshCapturedAgentMapTransform();
+        var nextMapBgPath = GetCurrentMapBackgroundPath();
+        var nextMapFgPath = GetCurrentMapForegroundPath();
+        if (mapStateManager.currentMap.RowId != lastRenderedMapId ||
+            currentMapBgPath != nextMapBgPath ||
+            currentMapFgPath != nextMapFgPath)
         {
-            var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
-            currentMapBgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}m_m.tex";
-            currentMapFgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}_m.tex";
-            // FIXME: ARR housing areas have black bg textures that need to be ignored...
-            if (mapStateManager.currentMap.RowId == 192 || mapStateManager.currentMap.RowId == 193 || mapStateManager.currentMap.RowId == 194)
-                currentMapBgPath = "";
+            currentMapBgPath = nextMapBgPath;
+            currentMapFgPath = nextMapFgPath;
             //log.Debug($"Drawing map BG: {mapBgPath} || FG: {mapFgPath}");
             //log.Debug($"OG Paths BG: {AgentMap.Instance()->SelectedMapBgPath} || FG: {AgentMap.Instance()->SelectedMapPath}");
             blendedTexture?.Dispose();
@@ -286,6 +297,45 @@ public class MapWindow : Window, IDisposable
         ImGui.SetCursorPos(DrawPosition);
         ImGui.Image(currentTexture.Handle, currentTexture.Size * Scale);
         lastRenderedMapId = mapStateManager.currentMap.RowId;
+    }
+
+    private unsafe void RefreshCapturedAgentMapTransform()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null || agentMap->SelectedMapId != mapStateManager.currentMap.RowId)
+        {
+            return;
+        }
+
+        var foregroundPath = agentMap->SelectedMapPath.ToString();
+        var backgroundPath = agentMap->SelectedMapBgPath.ToString();
+        if (string.IsNullOrWhiteSpace(foregroundPath) && string.IsNullOrWhiteSpace(backgroundPath))
+        {
+            return;
+        }
+
+        capturedAgentMapId = agentMap->SelectedMapId;
+        capturedAgentMapFgPath = foregroundPath;
+        capturedAgentMapBgPath = backgroundPath;
+        capturedAgentRawMapOffset = new Vector2(agentMap->SelectedOffsetX * -1, agentMap->SelectedOffsetY * -1);
+        capturedAgentMapScaleFactor = agentMap->SelectedMapSizeFactorFloat;
+    }
+
+    private string GetCurrentMapForegroundPath()
+    {
+        var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
+        return $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}_m.tex";
+    }
+
+    private string GetCurrentMapBackgroundPath()
+    {
+        if (mapStateManager.currentMap.RowId == 192 || mapStateManager.currentMap.RowId == 193 || mapStateManager.currentMap.RowId == 194)
+        {
+            return string.Empty;
+        }
+
+        var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
+        return $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}m_m.tex";
     }
 
     private IDalamudTextureWrap? LoadTexture(string bgPath, string fgPath)
@@ -424,7 +474,8 @@ public class MapWindow : Window, IDisposable
                 if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
                 {
                     ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
-                    clickedMarkers.Add(row);
+                    AddClickedMarker(row);
+                    AddNearbyElementsToSelection(ImGui.GetMousePos());
                 }
             }
         }
@@ -765,10 +816,127 @@ public class MapWindow : Window, IDisposable
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
-            clickedObjects.Add(obj);
+            AddClickedObject(obj);
+            AddNearbyElementsToSelection(ImGui.GetMousePos());
         }
 
         return true;
+    }
+
+    private void AddNearbyElementsToSelection(Vector2 screenPosition)
+    {
+        const float selectionRadius = 16.0f;
+        var scope = GetCurrentContentScope();
+
+        foreach (var obj in objTrackManager.liveAkuObjects)
+        {
+            if (IsObjectSelectableNear(obj, MapObjectSource.SelfFound, scope, screenPosition, selectionRadius))
+            {
+                AddClickedObject(obj);
+            }
+        }
+
+        if (ShouldDrawContent("RemoteMarker", scope))
+        {
+            foreach (var obj in objTrackManager.downloadHashList.Values)
+            {
+                if (IsObjectSelectableNear(obj, MapObjectSource.Downloaded, scope, screenPosition, selectionRadius))
+                {
+                    AddClickedObject(obj);
+                }
+            }
+        }
+
+        AddNearbyMapMarkersToSelection(screenPosition, selectionRadius, scope);
+    }
+
+    private bool IsObjectSelectableNear(AkuGameObject obj, MapObjectSource source, MapContentScope scope, Vector2 screenPosition, float selectionRadius)
+    {
+        return obj.mid == mapStateManager.currentMap.RowId &&
+            !IsLocalPlayerObject(obj) &&
+            ShouldDrawObjectKind(obj.objectKind, source, scope) &&
+            MatchesMapSearch(obj) &&
+            Vector2.Distance(screenPosition, GetMapScreenPosition(obj.pos)) <= selectionRadius;
+    }
+
+    private void AddNearbyMapMarkersToSelection(Vector2 screenPosition, float selectionRadius, MapContentScope scope)
+    {
+        try
+        {
+            var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(mapStateManager.currentMap.MapMarkerRange);
+            foreach (var row in rows)
+            {
+                if (row.X == 0 && row.Y == 0 || !ShouldDrawMapMarker(row.Icon, scope) || !MatchesMapSearch(row))
+                {
+                    continue;
+                }
+
+                var markerScreenPosition = currentMapScreenPosition + DrawPosition + new Vector2(row.X, row.Y) * Scale;
+                if (Vector2.Distance(screenPosition, markerScreenPosition) <= selectionRadius)
+                {
+                    AddClickedMarker(row);
+                }
+            }
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+        }
+    }
+
+    private void AddClickedObject(AkuGameObject obj)
+    {
+        var key = GetObjectSelectionKey(obj);
+        if (clickedObjects.Any(clicked => GetObjectSelectionKey(clicked) == key))
+        {
+            return;
+        }
+
+        clickedObjects.Add(obj);
+    }
+
+    private static string GetObjectSelectionKey(AkuGameObject obj)
+    {
+        return $"{obj.objectKind}:{obj.unique_ingame_id}:{obj.uuid}:{obj.bid}:{obj.pos.X:F2}:{obj.pos.Y:F2}:{obj.pos.Z:F2}";
+    }
+
+    private void AddClickedMarker(Lumina.Excel.Sheets.MapMarker marker)
+    {
+        if (clickedMarkers.Any(clicked => clicked.RowId == marker.RowId && clicked.SubrowId == marker.SubrowId))
+        {
+            return;
+        }
+
+        clickedMarkers.Add(marker);
+    }
+
+    private bool MatchesMapSearch(AkuGameObject obj)
+    {
+        if (!mapStateManager.filterEnabled || mapStateManager.filterExpression == string.Empty)
+        {
+            return true;
+        }
+
+        return (obj.name?.Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
+            obj.t.Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase) ||
+            obj.bid.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase) ||
+            (obj.nid is not null && obj.nid.Value.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase)) ||
+            (obj.npiid is not null && obj.npiid.Value.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase));
+    }
+
+    private bool MatchesMapSearch(Lumina.Excel.Sheets.MapMarker marker)
+    {
+        return !mapStateManager.filterEnabled ||
+            mapStateManager.filterExpression == string.Empty ||
+            marker.PlaceNameSubtext.Value.Name.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private Vector2 GetMapScreenPosition(Vector3 position)
+    {
+        return currentMapScreenPosition +
+               DrawPosition +
+               (GetPlayerMapPosition(position) +
+                GetMapOffsetVector() +
+                GetMapCenterOffsetVector()) * Scale;
     }
 
     private static Vector4 GetActorDotColor(AkuGameObject obj, bool isFriend)
@@ -909,7 +1077,7 @@ public class MapWindow : Window, IDisposable
                       GetMapCenterOffsetVector()) * Scale;
 
         var angle = -camera->CalculateSceneCameraYaw() + MathF.PI * 1.5f;
-        const float halfConeAngle = MathF.PI / 4.75f;
+        const float halfConeAngle = 75.0f * MathF.PI / 360.0f;
         var coneOrigin = center;
         var coneLength = 43.0f * Scale;
         var left = coneOrigin + AngleToDirection(angle - halfConeAngle) * coneLength;
@@ -1030,13 +1198,11 @@ public class MapWindow : Window, IDisposable
 
     private Vector2 TexturePixelToIngameCoord(Vector2 textureCoord)
     {
-        var tmp = (textureCoord - GetMapCenterOffsetVector()) / GetMapScaleFactor() - GetRawMapOffsetVector();
-        var result = new Vector2(0, 0);
-        tmp.X *= GetMapScaleFactor();
-        tmp.Y *= GetMapScaleFactor();
-        result.X = (float)Math.Round(((41.0f / GetMapScaleFactor() * ((tmp.X + 1024.0f) / 2048.0f) + 1) * 100) / 100, 1);
-        result.Y = (float)Math.Round(((41.0f / GetMapScaleFactor() * ((tmp.Y + 1024.0f) / 2048.0f) + 1) * 100) / 100, 1);
-        return result;
+        var rawMapPosition = (textureCoord - GetMapCenterOffsetVector()) / GetMapScaleFactor() - GetRawMapOffsetVector();
+        var mapPixelPosition = rawMapPosition * GetMapScaleFactor();
+        return new Vector2(
+            (float)Math.Round(((41.0f / GetMapScaleFactor() * ((mapPixelPosition.X + 1024.0f) / 2048.0f) + 1) * 100) / 100, 1),
+            (float)Math.Round(((41.0f / GetMapScaleFactor() * ((mapPixelPosition.Y + 1024.0f) / 2048.0f) + 1) * 100) / 100, 1));
     }
 
     private static Vector2[] GetRotationVectors(float angle, Vector2 center, Vector2 size)
@@ -1071,13 +1237,28 @@ public class MapWindow : Window, IDisposable
     /// <summary>
     /// Unscaled Vector of SelectedX, SelectedY
     /// </summary>
-    public Vector2 GetRawMapOffsetVector() => new(mapStateManager.currentMap.OffsetX, mapStateManager.currentMap.OffsetY);
-    //public unsafe Vector2 GetRawMapOffsetVector() => new(AgentMap.Instance()->SelectedOffsetX * -1, AgentMap.Instance()->SelectedOffsetY * -1);
+    public Vector2 GetRawMapOffsetVector()
+    {
+        if (capturedAgentMapId == mapStateManager.currentMap.RowId && capturedAgentMapScaleFactor > 0)
+        {
+            return capturedAgentRawMapOffset;
+        }
+
+        return new Vector2(mapStateManager.currentMap.OffsetX, mapStateManager.currentMap.OffsetY);
+    }
 
     /// <summary>
     /// Selected Scale Factor
     /// </summary>
-    public float GetMapScaleFactor() => mapStateManager.currentMap.SizeFactor /  100;
+    public float GetMapScaleFactor()
+    {
+        if (capturedAgentMapId == mapStateManager.currentMap.RowId && capturedAgentMapScaleFactor > 0)
+        {
+            return capturedAgentMapScaleFactor;
+        }
+
+        return mapStateManager.currentMap.SizeFactor / 100;
+    }
 
     /// <summary>
     /// 1024 vector, center offset vector
