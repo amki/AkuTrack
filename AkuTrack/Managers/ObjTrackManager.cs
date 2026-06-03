@@ -1,65 +1,42 @@
 using AkuTrack.ApiTypes;
 using Dalamud.Game.ClientState.Objects.Types;
-using FFXIVClientStructs;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
-using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Dalamud.Utility;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
-using System.Text;
 using System.Threading.Tasks;
-using System.Threading.Channels;
-using System.Security.Cryptography;
 
 namespace AkuTrack.Managers
 {
     public class ObjTrackManager : IDisposable
     {
-        private readonly record struct ObjectSnapshot(
-            Dalamud.Game.ClientState.Objects.Enums.ObjectKind ObjectKind,
-            string ObjectKindName,
-            string Name,
-            uint BaseId,
-            ulong GameObjectId,
-            ulong OwnerId,
-            ushort ObjectIndex,
-            nint Address,
-            Vector3 Position,
-            float Rotation,
-            float HitboxRadius,
-            uint? NameId,
-            int ModelCharaId,
-            uint? NamePlateIconId);
-
         private readonly IChatGui chat;
         private readonly IPluginLog log;
         private readonly IObjectTable objectTable;
         private readonly IFramework framework;
         private readonly IClientState clientState;
+        private readonly IDataManager dataManager;
         private readonly UploadManager uploadManager;
 
-        public Dictionary<string, AkuGameObject> seenList = new();
-        public Dictionary<ulong, AkuGameObject> seenObjTable = new();
+        public Dictionary<string, AkuGameObject> seenHashList = new();
+        public Dictionary<ulong, AkuGameObject> seenUIDList = new();
+        public List<AkuGameObject> liveAkuObjects = new();
         public List<AkuGameObject> toUpload = new();
 
-        private readonly Dictionary<uint, HashSet<ulong>> seenNpcIdsByZone = new();
-        private readonly List<AkuGameObject> downloadedZoneNpcs = new();
-        private readonly object downloadedZoneNpcsLock = new();
-        private uint downloadedZoneId;
-        private uint downloadingZoneId;
-        private Task? downloadZoneNpcsTask;
-        private bool updateInProgress;
+        public ConcurrentDictionary<string, AkuGameObject> downloadHashList = new();
+        public ConcurrentDictionary<string, AkuGameObject> currentMapDownloadHashList = new();
+        private bool isDownloadActive = false;
 
         private TimeSpan lastUpdate = new(0);
         private TimeSpan execDelay = new(0, 0, 1);
-        private const float NpcRoughPositionDistance = 10.0f;
 
         public ObjTrackManager(
             IFramework framework,
             IClientState clientState,
+            IDataManager dataManager,
             IDalamudPluginInterface pluginInterface,
             IChatGui chat,
             IPluginLog log,
@@ -73,28 +50,40 @@ namespace AkuTrack.Managers
             this.objectTable = objectTable;
             this.framework = framework;
             this.clientState = clientState;
+            this.dataManager = dataManager;
             this.uploadManager = uploadManager;
 
             framework.Update += Tick;
+            clientState.MapIdChanged += MapChanged;
+            MapChanged(clientState.MapId);
+        }
+
+        public void CleanSeen() {
+            seenHashList.Clear();
+            seenUIDList.Clear();
+            toUpload.Clear();
         }
 
         public void Dispose()
         {
             framework.Update -= Tick;
+            clientState.MapIdChanged -= MapChanged;
         }
 
-        public void CleanSeen() {
-            seenList.Clear();
-            seenObjTable.Clear();
-            seenNpcIdsByZone.Clear();
-            lock (downloadedZoneNpcsLock)
+        private async void MapChanged(uint newMapId) {
+            log.Debug($"Player changed map to {newMapId}!");
+            isDownloadActive = true;
+            var objs = await FetchAkuGameObjectsFromAkuAPI(newMapId);
+            currentMapDownloadHashList.Clear();
+            foreach (var obj in objs)
             {
-                downloadedZoneNpcs.Clear();
+                var uniqueId = obj.GetUniqueId();
+                if (uniqueId is not null)
+                {
+                    currentMapDownloadHashList.TryAdd(uniqueId, obj);
+                }
             }
-
-            downloadedZoneId = 0;
-            downloadingZoneId = 0;
-            toUpload.Clear();
+            isDownloadActive = false;
         }
 
         private void Tick(IFramework framework)
@@ -109,345 +98,238 @@ namespace AkuTrack.Managers
 
         private async void DoUpdate(IFramework framework)
         {
-            if (updateInProgress)
-            {
+            //log.Debug("Tick!");
+            var aObjs = GetAkuGameObjects();
+            liveAkuObjects = aObjs;
+            //log.Debug($"{liveAkuObjects.Count} live");
+            if(isDownloadActive) {
                 return;
             }
+            var stepOne = FilterUploadIgnore(aObjs);
+            //log.Debug($"{stepOne.Count} after stepOne");
+            var stepTwo = FilterSeen(stepOne);
+            //log.Debug($"{stepTwo.Count} after stepTwo");
+            var ups = FilterDownloaded(stepTwo);
+            //log.Debug($"{ups.Count} left");
 
-            updateInProgress = true;
-            try
+            if (ups.Count > 0)
             {
-                //log.Debug("Tick!");
-                StartDownloadedZoneNpcsRefresh();
-                var ups = LookForNewObjects();
-                if (ups.Count > 0)
+                toUpload.AddRange(ups);
+                var res = await uploadManager.DoUpload("duckit/", toUpload);
+                //log.Debug($"Uploading was {res}");
+                if (res)
                 {
-                    toUpload.AddRange(ups);
-                    var res = await uploadManager.DoUpload("duckit/", toUpload);
-                    //log.Debug($"Uploading was {res}");
-                    if (res)
-                    {
-                        toUpload.Clear();
-                    }
-                    else
-                    {
-                        log.Debug($"Uploading failed!");
-                    }
+                    toUpload.Clear();
                 }
-            }
-            catch (Exception ex)
-            {
-                log.Error(ex, "ObjTrackManager update failed.");
-            }
-            finally
-            {
-                updateInProgress = false;
+                else
+                {
+                    log.Debug($"Uploading failed!");
+                }
             }
         }
 
-        private List<AkuGameObject> LookForNewObjects()
-        {
-            List<AkuGameObject> objects = new();
-            foreach (var obj in objectTable)
-            {
+        private List<AkuGameObject> GetAkuGameObjects() {
+            List<AkuGameObject> res = new();
+            foreach (var obj in objectTable) {
                 if (obj is null)
                 {
                     continue;
                 }
 
-                if (TryGetNewObject(obj, out var upObj))
+                var uid = AkuGameObject.GetUniqueId(obj);
+                if (uid == null)
                 {
-                    objects.Add(upObj);
+                    log.Debug($"ERROR: Could not GetUniqueId from obj.bid {obj.BaseId} name {obj.Name}");
+                    continue;
                 }
+                var aObj = new AkuGameObject(obj, clientState);
+                res.Add(aObj);
             }
-
-            return objects;
+            return res;
         }
 
-        private bool TryGetNewObject(IGameObject obj, out AkuGameObject upObj)
-        {
-            upObj = null!;
-            try
+        private List<AkuGameObject> FilterDownloaded(List<AkuGameObject> input) {
+            List<AkuGameObject> res = new();
+            foreach (var obj in input)
             {
-                var snapshot = CreateSnapshot(obj);
+                var uniqueId = obj.GetUniqueId();
+                if(uniqueId is not null && currentMapDownloadHashList.ContainsKey(uniqueId)) {
+                    log.Debug($"Not uploading {obj.bid} ({uniqueId}) because it was in download.");
+                    continue;
+                }
+                res.Add(obj);
+            }
+            return res;
+        }
 
+        private List<AkuGameObject> FilterUploadIgnore(List<AkuGameObject> input) {
+            List<AkuGameObject> res = new();
+            foreach (var obj in input)
+            {
                 // no players, mounts, minion pets, housing items, wings/umbrellas, retainers
-                if(snapshot.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc ||
-                    snapshot.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Mount ||
-                    snapshot.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion ||
-                    snapshot.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.HousingEventObject ||
-                    snapshot.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament ||
-                    snapshot.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer
-                    ) {
-                    return false;
-                }
-                var uid = AkuGameObject.GetUniqueId(snapshot.ObjectKindName, snapshot.BaseId, snapshot.Position, snapshot.NameId);
-                if(uid == null ) {
-                    log.Debug($"ERROR: Could not GetUniqueId from obj.bid {snapshot.BaseId} name {snapshot.Name}");
-                    return false;
-                }
-                // Check if this object has already been sent by us
-                if (seenList.ContainsKey(uid))
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Mount ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.HousingEventObject ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Ornament ||
+                    obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Retainer
+                    )
                 {
-                    var oldObj = seenList[uid];
+                    continue;
+                }
+                if (obj.battleNpcSubKind is not null)
+                {
+                    if (obj.battleNpcSubKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.Pet ||
+                        obj.battleNpcSubKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.Buddy ||
+                        obj.battleNpcSubKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.RaceChocobo ||
+                        obj.battleNpcSubKind == Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind.NpcPartyMember)
+                    {
+                        continue;
+                    }
+                }
+                // Check if this object is owned by a player (e.g. a battlepet) or has been aggroed
+                var owner = objectTable.SearchById(obj.ownerId);
+                if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
+                {
+                    log.Debug($"Obj {obj.name} [{obj.bid}] is player owned. Not sending. @ x/y/z: {obj.pos.X}/{obj.pos.Y}/{obj.pos.Z}");
+                    continue;
+                }
+                res.Add(obj);
+            }
+            return res;
+        }
+
+        private List<AkuGameObject> FilterSeen(List<AkuGameObject> input)
+        {
+            List<AkuGameObject> objects = new();
+            foreach (var obj in input)
+            {
+                ///
+                /// Check if we know the hash of this obj already
+                ///
+
+                var uid = obj.GetUniqueId();
+                if(uid == null) {
+                    log.Error($"Something terrible happened! -> uid was null for {obj.bid}");
+                    continue;
+                }
+                if (seenHashList.ContainsKey(uid))
+                {
+                    var oldObj = seenHashList[uid];
                     if (uid != oldObj.GetUniqueId())
                     {
                         log.Error($"Something terrible happened! -> Check {uid} but seenList fetches {oldObj.GetUniqueId()}");
                     }
-                    if (snapshot.ObjectKindName != oldObj.t || snapshot.BaseId != oldObj.bid)
+                    if (obj.objectKind.ToString() != oldObj.t || obj.bid != oldObj.bid)
                     {
                         log.Error($"Something terrible happened! oldObj and obj:");
-                        log.Error($"{oldObj.t} || {snapshot.ObjectKindName}");
+                        log.Error($"{oldObj.t} || {obj.objectKind.ToString()}");
                         log.Error($"{oldObj.mid} || {clientState.MapId}");
-                        log.Error($"{oldObj.bid} || {snapshot.BaseId}");
+                        log.Error($"{oldObj.bid} || {obj.bid}");
                     }
-                    if(snapshot.NameId is not null) {
-                        if(snapshot.NameId != oldObj.nid) {
-                            log.Error($"Something terrible happened! oldObj and obj:");
-                            log.Error($"{oldObj.nid} || {snapshot.NameId}");
-                        }
+                    if(obj.nid != oldObj.nid) {
+                        log.Error($"Something terrible happened! oldObj and obj:");
+                        log.Error($"{oldObj.nid} || {obj.nid}");
                     }
-                    return false;
-                }
-                // Check if this object is owned by a player (e.g. a battlepet) or has been aggroed
-                if (snapshot.OwnerId != 0)
-                {
-                    var owner = objectTable.SearchById(snapshot.OwnerId);
-                    if (owner != null && owner.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
-                    {
-                        log.Debug($"Obj {snapshot.Name} [{snapshot.BaseId}] is player owned. Not sending. @ x/y/z: {snapshot.Position.X}/{snapshot.Position.Y}/{snapshot.Position.Z}");
-                        return false;
-                    }
+                    continue;
                 }
 
-                if (IsTrackableNpc(snapshot.ObjectKind) && HasSeenNpcInCurrentZone(snapshot.GameObjectId))
-                {
-                    return false;
-                }
+                ///
+                /// End hash check
+                ///
 
-                upObj = new AkuGameObject(
-                    snapshot.ObjectKindName,
-                    snapshot.Position,
-                    snapshot.BaseId,
-                    snapshot.GameObjectId,
-                    snapshot.HitboxRadius,
-                    snapshot.Name,
-                    snapshot.Rotation,
-                    snapshot.NameId,
-                    snapshot.ModelCharaId,
-                    snapshot.NamePlateIconId,
-                    clientState);
-
-                if (IsKnownDownloadedNpc(upObj))
-                {
-                    log.Debug($"Skipping upload for known downloaded {upObj.t} bid {upObj.bid} nid {upObj.nid} gameId {upObj.unique_ingame_id} zone {upObj.zid} map {upObj.mid} at {upObj.pos.X:F1}/{upObj.pos.Y:F1}/{upObj.pos.Z:F1}.");
-                    MarkNpcSeenInCurrentZone(snapshot.ObjectKind, snapshot.GameObjectId);
-                    return false;
+                if(obj.unique_ingame_id is null) {
+                    log.Error("Something terrible happened! AkuGameObject without unique id.");
+                    continue;
                 }
 
                 // Check if there has been an object in this slot already and if it is likely still the same one but has moved (moving changes the uid hash)
-                if (seenObjTable.ContainsKey(snapshot.GameObjectId) && !HasTableContentChanged(snapshot, upObj)) {
-                    //log.Debug($"Obj {obj.GameObjectId} has moved but was already sent.");
-                    return false;
+                if (seenUIDList.ContainsKey((ulong)obj.unique_ingame_id)) {
+                    var oldObj = seenUIDList[(ulong)obj.unique_ingame_id];
+                    if(!HasTableContentChanged(oldObj, obj))
+                        continue;
                 }
-                seenList.Add(uid, upObj);
-                MarkNpcSeenInCurrentZone(snapshot.ObjectKind, snapshot.GameObjectId);
+                seenHashList.Add(uid, obj);
                 // Remove here because it could also be that the go was here and changed
-                seenObjTable.Remove(snapshot.GameObjectId);
-                seenObjTable.Add(snapshot.GameObjectId, upObj);
-                return true;
+                seenUIDList.Remove((ulong)obj.unique_ingame_id);
+                seenUIDList.Add((ulong)obj.unique_ingame_id, obj);
+                objects.Add(obj);
             }
-            catch (Exception ex)
-            {
-                log.Warning(ex, $"Skipping unstable object while tracking. {GetObjectDebugInfo(obj)}");
+            return objects;
+        }
+
+        private bool HasTableContentChanged(AkuGameObject oldObj, AkuGameObject obj) {
+            if(obj.bid == oldObj.bid && obj.objectKind == oldObj.objectKind) {
                 return false;
             }
-        }
-
-        private ObjectSnapshot CreateSnapshot(IGameObject obj)
-        {
-            var objectKind = obj.ObjectKind;
-            uint? nameId = obj is ICharacter c ? c.NameId : null;
-            var nativeCharacterData = TryReadNativeCharacterData(obj);
-            return new ObjectSnapshot(
-                objectKind,
-                objectKind.ToString(),
-                obj.Name.ToString(),
-                obj.BaseId,
-                obj.GameObjectId,
-                obj.OwnerId,
-                obj.ObjectIndex,
-                obj.Address,
-                obj.Position,
-                obj.Rotation,
-                obj.HitboxRadius,
-                nameId,
-                nativeCharacterData.ModelCharaId,
-                nativeCharacterData.NamePlateIconId);
-        }
-
-        private unsafe (int ModelCharaId, uint? NamePlateIconId) TryReadNativeCharacterData(IGameObject obj)
-        {
-            if (obj is not ICharacter || obj.Address == nint.Zero)
-            {
-                return default;
-            }
-
-            if (obj.ObjectIndex >= objectTable.Length || objectTable.GetObjectAddress(obj.ObjectIndex) != obj.Address)
-            {
-                return default;
-            }
-
-            var chr = (Character*)obj.Address;
-            return (chr->ModelContainer.ModelCharaId, chr->NamePlateIconId);
-        }
-
-        private static string GetObjectDebugInfo(IGameObject obj)
-        {
-            try
-            {
-                return $"Kind: {obj.ObjectKind}, BaseId: {obj.BaseId}, GameObjectId: {obj.GameObjectId}.";
-            }
-            catch
-            {
-                return "Object details were unavailable.";
-            }
-        }
-
-        private void StartDownloadedZoneNpcsRefresh()
-        {
-            var zoneId = clientState.TerritoryType;
-            if (zoneId == 0 || downloadedZoneId == zoneId || downloadingZoneId == zoneId)
-            {
-                return;
-            }
-
-            if (downloadZoneNpcsTask is { IsCompleted: false })
-            {
-                return;
-            }
-
-            downloadingZoneId = zoneId;
-            downloadZoneNpcsTask = RefreshDownloadedZoneNpcs(zoneId);
-        }
-
-        private async Task RefreshDownloadedZoneNpcs(uint zoneId)
-        {
-            try
-            {
-                var downloads = await uploadManager.DownloadZoneContentFromAPI(zoneId);
-                var zoneNpcs = downloads
-                    .Where(obj => IsTrackableNpc(obj) && obj.unique_ingame_id is not null)
-                    .ToList();
-
-                lock (downloadedZoneNpcsLock)
-                {
-                    downloadedZoneNpcs.Clear();
-                    downloadedZoneNpcs.AddRange(zoneNpcs);
-                    downloadedZoneId = zoneId;
-                }
-
-                log.Debug($"AkuAPI Download: Cached {zoneNpcs.Count} zone NPCs with unique ingame ids for zone {zoneId}.");
-            }
-            catch (Exception ex)
-            {
-                log.Debug($"AkuAPI Download: Could not refresh zone NPC cache for zone {zoneId}: {ex.Message}");
-            }
-            finally
-            {
-                if (downloadingZoneId == zoneId)
-                {
-                    downloadingZoneId = 0;
-                }
-            }
-        }
-
-        private bool IsKnownDownloadedNpc(AkuGameObject obj)
-        {
-            if (!IsTrackableNpc(obj))
-            {
-                return false;
-            }
-
-            lock (downloadedZoneNpcsLock)
-            {
-                return downloadedZoneNpcs.Any(downloaded =>
-                    IsExactDownloadedEventNpcMatch(downloaded, obj) ||
-                    downloaded.zid == obj.zid &&
-                    downloaded.t == obj.t &&
-                    downloaded.bid == obj.bid &&
-                    downloaded.nid == obj.nid &&
-                    IsRoughlySamePosition(downloaded.pos, obj.pos));
-            }
-        }
-
-        private static bool IsExactDownloadedEventNpcMatch(AkuGameObject downloaded, AkuGameObject current)
-        {
-            return current.t == "EventNpc" &&
-                downloaded.t == current.t &&
-                downloaded.unique_ingame_id is not null &&
-                downloaded.unique_ingame_id == current.unique_ingame_id;
-        }
-
-        private static bool IsRoughlySamePosition(Vector3 left, Vector3 right)
-        {
-            return Vector3.Distance(left, right) <= NpcRoughPositionDistance;
-        }
-
-        private bool IsTrackableNpc(IGameObject obj)
-        {
-            return IsTrackableNpc(obj.ObjectKind);
-        }
-
-        private static bool IsTrackableNpc(Dalamud.Game.ClientState.Objects.Enums.ObjectKind objectKind)
-        {
-            return objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc ||
-                objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc;
-        }
-
-        private static bool IsTrackableNpc(AkuGameObject obj)
-        {
-            return obj.t == "EventNpc" || obj.t == "BattleNpc";
-        }
-
-        private bool HasSeenNpcInCurrentZone(IGameObject obj)
-        {
-            return HasSeenNpcInCurrentZone(obj.GameObjectId);
-        }
-
-        private bool HasSeenNpcInCurrentZone(ulong gameObjectId)
-        {
-            return seenNpcIdsByZone.TryGetValue(clientState.TerritoryType, out var seenNpcIds) &&
-                seenNpcIds.Contains(gameObjectId);
-        }
-
-        private void MarkNpcSeenInCurrentZone(IGameObject obj)
-        {
-            MarkNpcSeenInCurrentZone(obj.ObjectKind, obj.GameObjectId);
-        }
-
-        private void MarkNpcSeenInCurrentZone(Dalamud.Game.ClientState.Objects.Enums.ObjectKind objectKind, ulong gameObjectId)
-        {
-            if (!IsTrackableNpc(objectKind))
-            {
-                return;
-            }
-
-            if (!seenNpcIdsByZone.TryGetValue(clientState.TerritoryType, out var seenNpcIds))
-            {
-                seenNpcIds = new HashSet<ulong>();
-                seenNpcIdsByZone.Add(clientState.TerritoryType, seenNpcIds);
-            }
-
-            seenNpcIds.Add(gameObjectId);
-        }
-
-        private bool HasTableContentChanged(ObjectSnapshot obj, AkuGameObject akuObj) {
-            if(obj.BaseId == akuObj.bid && obj.ObjectKindName == akuObj.t) {
-                return false;
-            }
-            log.Debug($"Obj changed in table old: {obj.Name}({obj.BaseId}) new: {obj.Name}/{obj.BaseId}");
+            log.Debug($"Obj changed in table old: {obj.name}({obj.bid}) new: {obj.name}/{obj.bid}");
             return true;
+        }
+
+        public async Task<List<AkuGameObject>> FetchAkuGameObjectsFromAkuAPI(uint mid)
+        {
+            List<AkuGameObject> res = new();
+            var objs = await uploadManager.DownloadMapContentFromAPI(mid);
+            foreach (var obj in objs)
+            {
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
+                {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(clientState.ClientLanguage).GetRow(obj.bid);
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of ENpcResident");
+                    }
+                }
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
+                {
+                    if (obj.nid == null)
+                        continue;
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.BNpcName>(clientState.ClientLanguage).GetRow((uint)obj.nid);
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        log.Debug($"{obj.t} ID {obj.nid} is not in range of BNpcName");
+                    }
+                }
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
+                {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(clientState.ClientLanguage).GetRow(obj.bid);
+                        obj.name = StringExtensions.ToUpper(y.Singular.ToString(), true, true, false, clientState.ClientLanguage);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of EObjName");
+                    }
+                }
+                if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint)
+                {
+                    try
+                    {
+                        var y = dataManager.GetExcelSheet<Lumina.Excel.Sheets.GatheringPoint>(clientState.ClientLanguage).GetRow(obj.bid);
+                        //FIXME: Find the gathering node's name. It is in GatheringPointName but how to get there?
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        log.Debug($"{obj.t} ID {obj.bid} is not in range of GatheringPoint");
+                    }
+                }
+                if (obj.GetUniqueId() == null)
+                {
+                    log.Debug($"ERROR: Could not GetUniqueId of obj.bid {obj.bid} name {obj.name}");
+                    continue;
+                }
+                res.Add(obj);
+            }
+            return res;
         }
     }
 }

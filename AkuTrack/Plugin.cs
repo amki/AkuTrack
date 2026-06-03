@@ -1,19 +1,11 @@
 using AkuTrack.Managers;
-using Dalamud.Bindings.ImGui;
 using AkuTrack.Windows;
 using Dalamud.Game.Command;
-using Dalamud.Game.Gui;
-using Dalamud.Hooking;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using FFXIVClientStructs.FFXIV.Component.GUI;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.IO;
-using System.Runtime.InteropServices;
 
 namespace AkuTrack;
 
@@ -24,10 +16,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
-    [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
-    [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
 
     public ServiceProvider serviceProvider { get; private set; }
 
@@ -38,14 +28,6 @@ public sealed class Plugin : IDalamudPlugin
     private MainWindow MainWindow { get; init; }
     private MapWindow MapWindow { get; init; }
     private SearchWindow SearchWindow { get; init; }
-    private UploadManager UploadManager { get; init; }
-    private bool wasGameMapVisible;
-    private bool allowedGameMapVisible;
-    private int hideGameMapFrames;
-    private bool handledReplacementMapOpen;
-    private readonly Hook<OpenMapDelegate> openMapHook;
-
-    private unsafe delegate void OpenMapDelegate(AgentMap* thisPtr, OpenMapInfo* data);
 
     public Plugin(
         IFramework framework,
@@ -54,13 +36,8 @@ public sealed class Plugin : IDalamudPlugin
         IDataManager dataManager,
         ITextureProvider textureProvider,
         IChatGui chatGui,
-        IGameGui gameGui,
         IPluginLog pluginLog,
         IObjectTable objectTable,
-        IPartyList partyList,
-        IFateTable fateTable,
-        IAetheryteList aetheryteList,
-        IGameInteropProvider gameInteropProvider,
         ITextureSubstitutionProvider textureSubstitutionProvider)
     {
         // You might normally want to embed resources and load them from the manifest stream
@@ -74,16 +51,12 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton(this)
             .AddSingleton(framework)
             .AddSingleton(clientState)
-            .AddSingleton(partyList)
             .AddSingleton(pluginInterface)
             .AddSingleton(dataManager)
             .AddSingleton(textureProvider)
             .AddSingleton(chatGui)
-            .AddSingleton(gameGui)
             .AddSingleton(pluginLog)
             .AddSingleton(objectTable)
-            .AddSingleton(fateTable)
-            .AddSingleton(aetheryteList)
             .AddSingleton(textureSubstitutionProvider)
             .AddSingleton(configuration)
             .AddSingleton<MainWindow>()
@@ -91,14 +64,11 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<MapWindow>()
             .AddSingleton<SearchWindow>()
             .AddSingleton<UploadManager>()
-            .AddSingleton<AllaganToolsIpc>()
             .AddSingleton<ObjTrackManager>()
-            .AddSingleton<TopBar>()
+            .AddSingleton<MapStateManager>()
             .AddSingleton<BottomBar>()
             .AddSingleton(windowSystem)
             .AddTransient<DetailsWindow>()
-            .AddTransient<ItemExtraDataWindow>()
-            .AddTransient<SightseeingLogEntryWindow>()
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
@@ -106,11 +76,6 @@ public sealed class Plugin : IDalamudPlugin
         MapWindow = serviceProvider.GetRequiredService<MapWindow>();
         SearchWindow = serviceProvider.GetRequiredService<SearchWindow>();
         Configuration = serviceProvider.GetRequiredService<Configuration>();
-        UploadManager = serviceProvider.GetRequiredService<UploadManager>();
-        unsafe
-        {
-            openMapHook = gameInteropProvider.HookFromAddress<OpenMapDelegate>((nint)AgentMap.MemberFunctionPointers.OpenMap, OpenMapDetour);
-        }
 
 
         windowSystem.AddWindow(ConfigWindow);
@@ -140,11 +105,6 @@ public sealed class Plugin : IDalamudPlugin
         // Adds another button doing the same but for the main ui of the plugin
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
 
-        clientState.Login += OnLogin;
-        framework.Update += OnFrameworkUpdate;
-        openMapHook.Enable();
-        _ = UploadManager.ReloadChestDropsAsync();
-
         // Add a simple message to the log with level set to information
         // Use /xllog to open the log window in-game
         // Example Output: 00:57:54.959 | INF | [SamplePlugin] ===A cool log message from Sample Plugin===
@@ -157,10 +117,6 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.Draw -= windowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
-        ClientState.Login -= OnLogin;
-        serviceProvider.GetRequiredService<IFramework>().Update -= OnFrameworkUpdate;
-        serviceProvider.GetRequiredService<ObjTrackManager>().Dispose();
-        openMapHook.Dispose();
         
         windowSystem.RemoveAllWindows();
 
@@ -171,169 +127,9 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.RemoveHandler("/akut");
         CommandManager.RemoveHandler("/akum");
-        CommandManager.RemoveHandler("/aku");
+        CommandManager.RemoveHandler("/akuc");
+        serviceProvider.Dispose();
     }
     public void ToggleConfigUi() => ConfigWindow.Toggle();
     public void ToggleMainUi() => MainWindow.Toggle();
-
-    private void OnFrameworkUpdate(IFramework framework)
-    {
-        var isGameMapVisible = IsGameMapVisible();
-        MapWindow.FocusCurrentFlagMarkerIfNeeded();
-
-        if (Configuration.ReplaceGameMap)
-        {
-            if (allowedGameMapVisible)
-            {
-                if (!isGameMapVisible)
-                {
-                    allowedGameMapVisible = false;
-                    wasGameMapVisible = false;
-                }
-
-                return;
-            }
-
-            if (hideGameMapFrames > 0)
-            {
-                hideGameMapFrames--;
-                HideGameMapAddons();
-                wasGameMapVisible = false;
-                return;
-            }
-
-            if (isGameMapVisible)
-            {
-                if (IsGameMapModifierPressed())
-                {
-                    allowedGameMapVisible = true;
-                    handledReplacementMapOpen = false;
-                    wasGameMapVisible = true;
-                    return;
-                }
-
-                if (!handledReplacementMapOpen)
-                {
-                    MapWindow.CaptureSelectedMapFromAgent();
-                    MapWindow.IsOpen = !MapWindow.IsOpen;
-                    handledReplacementMapOpen = true;
-                }
-
-                CloseGameMap();
-                wasGameMapVisible = false;
-                return;
-            }
-
-            handledReplacementMapOpen = false;
-            wasGameMapVisible = false;
-            return;
-        }
-
-        if (!Configuration.ToggleMapWithGameMap)
-        {
-            wasGameMapVisible = isGameMapVisible;
-            return;
-        }
-
-        if (isGameMapVisible == wasGameMapVisible)
-        {
-            return;
-        }
-
-        wasGameMapVisible = isGameMapVisible;
-        MapWindow.IsOpen = isGameMapVisible;
-    }
-
-    private void OnLogin()
-    {
-        _ = UploadManager.ReloadChestDropsAsync();
-    }
-
-    private unsafe void OpenMapDetour(AgentMap* thisPtr, OpenMapInfo* data)
-    {
-        var isFlagMapOpen = data != null && data->Type == MapType.FlagMarker;
-        var isMapKeyOpen = data == null;
-        var replaceGameMap = Configuration.ReplaceGameMap;
-        var allowGameMap = replaceGameMap && (allowedGameMapVisible || IsGameMapModifierPressed());
-        openMapHook.Original(thisPtr, data);
-
-        if (replaceGameMap)
-        {
-            allowedGameMapVisible = allowGameMap;
-
-            if (!allowGameMap)
-            {
-                MapWindow.CaptureSelectedMapFromAgent();
-                MapWindow.IsOpen = isMapKeyOpen ? !MapWindow.IsOpen : true;
-                handledReplacementMapOpen = isMapKeyOpen;
-                hideGameMapFrames = 3;
-                CloseGameMap();
-                wasGameMapVisible = false;
-            }
-            else
-            {
-                handledReplacementMapOpen = false;
-            }
-        }
-
-        if (isFlagMapOpen)
-        {
-            MapWindow.FocusCurrentFlagMarkerOnNextDraw();
-        }
-    }
-
-    private bool IsGameMapModifierPressed()
-    {
-        var io = ImGui.GetIO();
-        return Configuration.ReplaceGameMapModifier switch
-        {
-            GameMapOpenModifier.Ctrl => io.KeyCtrl || IsKeyDown(0x11),
-            GameMapOpenModifier.Shift => io.KeyShift || IsKeyDown(0x10),
-            GameMapOpenModifier.Alt => io.KeyAlt || IsKeyDown(0x12),
-            _ => io.KeyCtrl || IsKeyDown(0x11),
-        };
-    }
-
-    private static bool IsKeyDown(int virtualKey)
-    {
-        return (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
-    }
-
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int virtualKey);
-
-    private static unsafe void CloseGameMap()
-    {
-        AgentMap.Instance()->Hide();
-        HideGameMapAddons();
-    }
-
-    private static unsafe void HideGameMapAddons()
-    {
-        HideAddon("AreaMap");
-        HideAddon("NaviMap");
-    }
-
-    private static unsafe void HideAddon(string addonName)
-    {
-        var addon = GameGui.GetAddonByName(addonName, 1);
-        if (addon.IsNull || !addon.IsVisible)
-        {
-            return;
-        }
-
-        ((AtkUnitBase*)addon.Address)->Hide(false, false, 0);
-    }
-
-    private static bool IsGameMapVisible()
-    {
-        var areaMap = GameGui.GetAddonByName("AreaMap", 1);
-        if (!areaMap.IsNull && areaMap.IsVisible)
-        {
-            return true;
-        }
-
-        var naviMap = GameGui.GetAddonByName("NaviMap", 1);
-        return !naviMap.IsNull && naviMap.IsVisible;
-    }
 }

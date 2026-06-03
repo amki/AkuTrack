@@ -1,13 +1,4 @@
-using Dalamud.Game.ClientState.Objects.Enums;
-using Dalamud.Game.ClientState.Objects.Types;
-using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Component.GUI;
-using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
-using System.Numerics;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace AkuTrack.ApiTypes
 {

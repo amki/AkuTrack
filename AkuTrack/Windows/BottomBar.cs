@@ -1,49 +1,51 @@
-using AkuTrack.ApiTypes;
+using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin.Services;
-using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using Serilog;
 using System;
-using System.Collections.Generic;
 using System.Numerics;
-using System.Text;
 
 namespace AkuTrack.Windows
 {
     public class BottomBar
     {
         private readonly IPluginLog log;
+        private readonly IClientState clientState;
         private readonly Configuration configuration;
+        private readonly MapStateManager mapStateManager;
         private readonly ConfigWindow configWindow;
         private readonly SearchWindow searchWindow;
+
         public BottomBar(IPluginLog log,
+            IClientState clientState,
             ConfigWindow configWindow,
             SearchWindow searchWindow,
-            Configuration configuration) {
+            Configuration configuration,
+            MapStateManager mapStateManager) {
             this.log = log;
+            this.clientState = clientState;
             this.configWindow = configWindow;
             this.searchWindow = searchWindow;
             this.configuration = configuration;
+            this.mapStateManager = mapStateManager;
         }
-        public unsafe void Draw(bool isMapHovered, Vector2 currentMapPixelSize, Vector2 DrawPosition, Vector2 DrawOffset, float Scale, string playerPositionText)
+        public unsafe void Draw(bool isMapHovered, Vector2 currentMapPixelSize, Vector2 DrawPosition, Vector2 DrawOffset, float Scale)
         {
             using (ImRaii.Group())
             {
-                var scale = ImGuiHelpers.GlobalScale;
-                var bottomBarSize = new Vector2(ImGui.GetContentRegionAvail().X, 30.0f * scale);
-                using var childBackgroundStyle = ImRaii.PushColor(ImGuiCol.ChildBg, new Vector4(0.11f, 0.085f, 0.043f, 0.92f));
-                using var bottomBar = ImRaii.Child("bottom_child", bottomBarSize, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
-                if (!bottomBar)
-                {
-                    return;
+                var bottomBarSize = new Vector2(ImGui.GetContentRegionMax().X, 30.0f * ImGuiHelpers.GlobalScale);
+                ImGui.SetCursorPos(ImGui.GetContentRegionMax() - bottomBarSize);
+                using var childBackgroundStyle = ImRaii.PushColor(ImGuiCol.ChildBg, Vector4.Zero with { W = 0.33f });
+                using var bottomBar = ImRaii.Child("bottom_child", bottomBarSize);
+                if(mapStateManager.currentMap.RowId != clientState.MapId) {
+                    if (ImGui.Button("Sync"))
+                    {
+                        mapStateManager.SwitchMap(clientState.MapId);
+                    }
                 }
-
-                var padding = 8.0f * scale;
-                var topPadding = MathF.Max(3.0f * scale, (bottomBarSize.Y - ImGui.GetFrameHeight()) * 0.5f);
-                ImGui.SetCursorPos(new Vector2(padding, topPadding));
+                ImGui.SameLine();
                 if (ImGui.Button("Config"))
                 {
                     configWindow.Toggle();
@@ -53,60 +55,36 @@ namespace AkuTrack.Windows
                 {
                     searchWindow.Toggle();
                 }
+                ImGui.SameLine();
+                if(ImGui.Checkbox("Filter", ref mapStateManager.filterEnabled)) {
 
-                if (!string.IsNullOrWhiteSpace(playerPositionText))
+                }
+                if (mapStateManager.filterEnabled)
                 {
-                    var playerPositionSize = ImGui.CalcTextSize(playerPositionText);
-                    ImGui.SameLine(MathF.Max(ImGui.GetCursorPosX() + ImGui.GetStyle().ItemSpacing.X, (bottomBarSize.X - playerPositionSize.X) * 0.5f));
-                    ImGui.TextColored(configuration.TextColor, playerPositionText);
+                    ImGui.SameLine();
+                    ImGui.SetNextItemWidth(180.0f);
+                    ImGui.InputTextWithHint("", "Search map", ref mapStateManager.filterExpression, 128);
                 }
 
-                DrawFilterControlsRightAligned(bottomBarSize.X, padding, topPadding);
-            }
-        }
+                if (true /*isMapHovered*/)
+                {
+                    // Set cursorPosition to top left corner
+                    var cursorPosition = ImGui.GetMousePos() - ImGui.GetWindowPos();
+                    cursorPosition.Y -= 30.0f * ImGuiHelpers.GlobalScale - currentMapPixelSize.Y;
 
-        private void DrawFilterControlsRightAligned(float barWidth, float rightPadding, float topPadding)
-        {
-            var scale = ImGuiHelpers.GlobalScale;
-            var clearButtonWidth = configuration.MapSearchFilterEnabled && !string.IsNullOrWhiteSpace(configuration.MapSearchFilterText)
-                ? ImGui.CalcTextSize("Clear").X + ImGui.GetStyle().FramePadding.X * 2.0f + ImGui.GetStyle().ItemSpacing.X
-                : 0.0f;
-            var inputWidth = configuration.MapSearchFilterEnabled ? 180.0f * scale + ImGui.GetStyle().ItemSpacing.X : 0.0f;
-            var filterWidth = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + ImGui.CalcTextSize("Filter").X + inputWidth + clearButtonWidth;
-            ImGui.SetCursorPosX(MathF.Max(0.0f, barWidth - filterWidth - rightPadding));
-            ImGui.SetCursorPosY(topPadding);
+                    // Set cursorPosition to top left corner of map
+                    cursorPosition -= DrawPosition;
+                    cursorPosition /= Scale;
 
-            var mapFilterEnabled = configuration.MapSearchFilterEnabled;
-            if (ImGui.Checkbox("Filter##map_search_filter_enabled", ref mapFilterEnabled))
-            {
-                configuration.MapSearchFilterEnabled = mapFilterEnabled;
-                configuration.Save();
-            }
+                    // cursorPosition is now relative to map texture and always (0,0) / (2048/2048)
 
-            if (!configuration.MapSearchFilterEnabled)
-            {
-                return;
-            }
+                    var cursorMapPosition = TexturePixelToIngameCoord(cursorPosition);
 
-            ImGui.SameLine();
-            var filterText = configuration.MapSearchFilterText;
-            ImGui.SetNextItemWidth(180.0f * scale);
-            if (ImGui.InputTextWithHint("##map_search_filter_text", "Search map", ref filterText, 128))
-            {
-                configuration.MapSearchFilterText = filterText;
-                configuration.Save();
-            }
-
-            if (string.IsNullOrWhiteSpace(configuration.MapSearchFilterText))
-            {
-                return;
-            }
-
-            ImGui.SameLine();
-            if (ImGui.Button("Clear##map_search_filter_clear"))
-            {
-                configuration.MapSearchFilterText = string.Empty;
-                configuration.Save();
+                    var cursorPositionString = $"Cursor  {cursorMapPosition.X:F1}  {cursorMapPosition.Y:F1}";
+                    var cursorStringSize = ImGui.CalcTextSize(cursorPositionString);
+                    ImGui.SameLine(ImGui.GetContentRegionMax().X * 2.0f / 3.0f - cursorStringSize.X / 2.0f);
+                    ImGui.TextColored(configuration.TextColor, cursorPositionString);
+                }
             }
         }
 

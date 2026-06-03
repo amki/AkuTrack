@@ -6,15 +6,8 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using Lumina.Excel.Sheets;
-using Lumina.Excel.Sheets.Experimental;
-using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Linq;
 using System.Numerics;
-using System.Threading;
 
 namespace AkuTrack.Windows;
 
@@ -63,7 +56,7 @@ public class MainWindow : Window, IDisposable
             // Check if this child is drawing
             if (child.Success)
             {
-                ImGui.Text($"I have seen {objTrackManager.seenList.Count} objects since last reset.");
+                ImGui.Text($"I have seen {objTrackManager.seenHashList.Count} objects since last reset.");
 
                 ImGuiHelpers.ScaledDummy(20.0f);
 
@@ -96,8 +89,8 @@ public class MainWindow : Window, IDisposable
                 {
                     DrawAkuGameObject(o);
                 }
-                ImGui.Text($"Seen objects [{objTrackManager.seenList.Count}]:");
-                foreach (var o in objTrackManager.seenList)
+                ImGui.Text($"Seen objects [{objTrackManager.seenHashList.Count}]:");
+                foreach (var o in objTrackManager.seenHashList)
                 {
                     DrawAkuGameObject(o.Value);
                 }
@@ -123,7 +116,14 @@ public class MainWindow : Window, IDisposable
     }
 
     private void DrawAkuGameObject(AkuGameObject o) {
-        if (ImGui.CollapsingHeader($"[{o.bid}] {o.name}"))
+        string headerText = string.Empty;
+        var uniqueId = o.GetUniqueId();
+        if(uniqueId is not null && objTrackManager.downloadHashList.ContainsKey(uniqueId)) {
+            headerText = $"[D] [{o.bid}] {o.name}";
+        } else {
+            headerText = $"[{o.bid}] {o.name}";
+        }
+        if (ImGui.CollapsingHeader(headerText))
         {
             ImGui.Text($"BaseId: {o.bid}");
             //var map = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().FirstOrDefault(m => m.TerritoryType.RowId == clientState.TerritoryType);

@@ -11,60 +11,42 @@ namespace AkuTrack.ApiTypes
 {
     public class AkuGameObject
     {
-        public AkuGameObject()
-        {
+        public unsafe AkuGameObject(IGameObject obj, IClientState clientState) {
             this.created_at = DateTimeOffset.Now;
-            this.t = string.Empty;
-            this.name = string.Empty;
-        }
-
-        public AkuGameObject(
-            string objectKind,
-            Vector3 position,
-            uint baseId,
-            ulong gameObjectId,
-            float hitboxRadius,
-            string name,
-            float rotation,
-            uint? nameId,
-            int modelCharaId,
-            uint? namePlateIconId,
-            IClientState clientState)
-        {
-            this.created_at = DateTimeOffset.Now;
-            this.t = objectKind;
-            this.pos = position;
-            this.bid = baseId;
-            this.unique_ingame_id = gameObjectId;
-            this.hr = hitboxRadius;
-            this.name = name;
-            this.mid = clientState.MapId;
-            this.zid = clientState.TerritoryType;
-            this.r = rotation;
-            this.nid = nameId;
-            this.moid = modelCharaId;
-            this.npiid = namePlateIconId;
-        }
-
-        public AkuGameObject(IGameObject obj, IClientState clientState) {
-            uint? nameId = obj is ICharacter c ? c.NameId : null;
-            this.created_at = DateTimeOffset.Now;
-            this.t = obj.ObjectKind.ToString();
+            this.objectKind = obj.ObjectKind;
             this.pos = obj.Position;
-            this.bid = obj.BaseId;
+            // Fixme actually load the unique id
             this.unique_ingame_id = obj.GameObjectId;
+            this.bid = obj.BaseId;
             this.hr = obj.HitboxRadius;
             this.name = obj.Name.ToString();
             this.mid = clientState.MapId;
             this.zid = clientState.TerritoryType;
             this.r = obj.Rotation;
-            this.nid = nameId;
+            this.ownerId = obj.OwnerId;
+
+            if (obj is ICharacter c)
+            {
+                this.nid = c.NameId;
+                if (c.Address != nint.Zero)
+                {
+                    FFXIVClientStructs.FFXIV.Client.Game.Character.Character* chr = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)c.Address;
+                    this.moid = chr->ModelContainer.ModelCharaId;
+                    this.npiid = chr->NamePlateIconId;
+                }
+            }
+
+            if(obj is IBattleNpc bnpc) {
+                this.battleNpcSubKind = bnpc.BattleNpcKind;
+            }
         }
 
         public AkuGameObject(DownloadGameObject dgo) {
             this.created_at = dgo.created_at;
             this.lastseen_at = dgo.last_seen_at;
-            this.t = dgo.objecttype;
+            this.objectKind = Enum.TryParse<ObjectKind>(dgo.objecttype, out var parsedObjectKind)
+                ? parsedObjectKind
+                : ObjectKind.None;
             this.name = "<downloaded>";
             this.mid = dgo.map_id;
             this.zid = dgo.zone_id;
@@ -76,23 +58,29 @@ namespace AkuTrack.ApiTypes
             this.moid = dgo.moid;
             this.hr = dgo.hit_radius;
             this.nid = dgo.nid;
-            this.tint = new Vector4(0.5f, 0.5f, 0.5f, 0.5f);
+            this.isDownloaded = true;
         }
         [JsonIgnore]
         public DateTimeOffset? created_at { get; set; }
         [JsonIgnore]
         public DateTimeOffset? lastseen_at { get; set; }
-        public string t { get; set; }
+        public string t { get { return objectKind.ToString(); } }
         [JsonIgnore]
         public string name { get; set; }
         [JsonIgnore]
-        public Vector4 tint { get; set; } = new Vector4(1f, 1f, 1f, 1f);
+        public bool isDownloaded { get; set; } = false;
+        [JsonIgnore]
+        public ObjectKind objectKind { get; set;  }
+        [JsonIgnore]
+        public BattleNpcSubKind? battleNpcSubKind { get; set; }
+        [JsonIgnore]
+        public uint ownerId { get; set; }
         public uint mid { get; set; }
         public uint zid { get; set; }
         public Vector3 pos { get; set; }
         public float r { get; set; }
-        public uint bid { get; set; }
         public ulong? unique_ingame_id { get; set; }
+        public uint bid { get; set; }
         public uint? npiid {  get; set; }
         public int moid { get; set; }
         //public bool v { get; set; }
@@ -151,26 +139,6 @@ namespace AkuTrack.ApiTypes
             }
             if (input == string.Empty)
                 return null;
-            return CalculateUniqueId(input);
-        }
-
-        public static string? GetUniqueId(string objectKind, uint baseId, Vector3 position, uint? nameId)
-        {
-            string input;
-            if (objectKind == ObjectKind.EventNpc.ToString() || objectKind == ObjectKind.BattleNpc.ToString())
-            {
-                if (nameId is null)
-                {
-                    return null;
-                }
-
-                input = $"{objectKind},{baseId},{Math.Round(position.X / 10, 0) * 10},{Math.Round(position.Y / 10, 0) * 10},{Math.Round(position.Z / 10, 0) * 10},{nameId}";
-            }
-            else
-            {
-                input = $"{objectKind},{baseId},{position.X},{position.Y},{position.Z}";
-            }
-
             return CalculateUniqueId(input);
         }
     }
