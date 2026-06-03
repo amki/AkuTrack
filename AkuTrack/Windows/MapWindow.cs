@@ -1,6 +1,8 @@
 using AkuTrack.ApiTypes;
 using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility;
@@ -461,6 +463,7 @@ public class MapWindow : Window, IDisposable
             if (!doDraw)
                 return;
         }
+        var handledClickAndHover = false;
         if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
         {
             if (ShouldHideDownloadedNpcWithoutUniqueIngameId(obj, source))
@@ -515,9 +518,15 @@ public class MapWindow : Window, IDisposable
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure)
             DrawIcon((int)IconIds.Treasure, obj);
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
-            DrawPcDot(obj);
+            handledClickAndHover = DrawActorDot(obj);
+        else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion)
+            handledClickAndHover = DrawActorDot(obj);
         else
             DrawIcon((int)IconIds.Unknown, obj);
+        if (handledClickAndHover)
+        {
+            return;
+        }
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
             ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
@@ -526,9 +535,10 @@ public class MapWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
         {
             DrawTooltip(obj);
-            if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
+            if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc ||
+                obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion)
             {
-                DrawPcDot(obj, true, false);
+                DrawActorDot(obj, true, false);
             }
             else
             {
@@ -546,6 +556,7 @@ public class MapWindow : Window, IDisposable
             {
                 Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte => true,
                 Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc => configuration.DrawOtherPlayers,
+                Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion => configuration.DrawOtherPlayers,
                 _ => true,
             };
         }
@@ -715,26 +726,72 @@ public class MapWindow : Window, IDisposable
             ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     }
 
-    private void DrawPcDot(AkuGameObject obj, bool hover = false, bool interactive = true)
+    private bool DrawActorDot(AkuGameObject obj, bool hover = false, bool interactive = true)
     {
         var center = currentMapScreenPosition +
                      DrawPosition +
                      (GetPlayerMapPosition(obj.pos) +
                       GetMapOffsetVector() +
                       GetMapCenterOffsetVector()) * Scale;
+        var isFriend = IsFriendPlayer(obj);
         var radius = hover ? 5.0f : 4.0f;
-        var fillColor = ImGui.GetColorU32(new Vector4(0.18f, 0.62f, 1.0f, 1.0f));
-        var outlineColor = ImGui.GetColorU32(new Vector4(0.02f, 0.18f, 0.45f, 1.0f));
+        var hitRadius = MathF.Max(radius + 3.0f, 8.0f);
+        var fillColor = ImGui.GetColorU32(GetActorDotColor(obj, isFriend));
+        var borderColor = ImGui.GetColorU32(new Vector4(0.02f, 0.025f, 0.03f, 0.85f));
+        var isHovered = false;
 
         if (interactive)
         {
-            ImGui.SetCursorScreenPos(center - new Vector2(radius));
-            ImGui.InvisibleButton($"##pc_dot_{obj.unique_ingame_id}_{obj.uuid}", new Vector2(radius * 2.0f));
+            ImGui.SetCursorScreenPos(center - new Vector2(hitRadius));
+            ImGui.InvisibleButton($"##actor_dot_{obj.objectKind}_{obj.unique_ingame_id}_{obj.uuid}", new Vector2(hitRadius * 2.0f));
+            isHovered = ImGui.IsItemHovered();
         }
 
         var drawList = ImGui.GetWindowDrawList();
         drawList.AddCircleFilled(center, radius, fillColor, 16);
-        drawList.AddCircle(center, radius, outlineColor, 16, MathF.Max(1.0f, Scale));
+        drawList.AddCircle(center, radius, borderColor, 16, MathF.Max(1.0f, ImGuiHelpers.GlobalScale));
+
+        if (!interactive)
+        {
+            return false;
+        }
+
+        if (isHovered)
+        {
+            DrawTooltip(obj);
+            DrawActorDot(obj, true, false);
+        }
+
+        if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        {
+            ImGui.OpenPopup("AkuTrack_AkuObject_Context_Menu");
+            clickedObjects.Add(obj);
+        }
+
+        return true;
+    }
+
+    private static Vector4 GetActorDotColor(AkuGameObject obj, bool isFriend)
+    {
+        if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion)
+        {
+            return new Vector4(1.0f, 0.72f, 0.18f, 0.95f);
+        }
+
+        return isFriend
+            ? new Vector4(0.1f, 1.0f, 0.55f, 0.95f)
+            : new Vector4(0.15f, 0.65f, 1.0f, 0.9f);
+    }
+
+    private bool IsFriendPlayer(AkuGameObject obj)
+    {
+        if (obj.unique_ingame_id is not { } gameObjectId)
+        {
+            return false;
+        }
+
+        return objectTable.SearchById(gameObjectId) is ICharacter character &&
+            character.StatusFlags.HasFlag(StatusFlags.Friend);
     }
 
     private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation)
@@ -816,7 +873,8 @@ public class MapWindow : Window, IDisposable
         var angle = -rotation + MathF.PI / 2.0f;
         var scaledSize = texture.Size / 2.0f * Scale;
         var minimumSize = new Vector2(36.0f * ImGuiHelpers.GlobalScale);
-        var size = new Vector2(MathF.Max(scaledSize.X, minimumSize.X), MathF.Max(scaledSize.Y, minimumSize.Y));
+        var maximumSize = new Vector2(96.0f * ImGuiHelpers.GlobalScale);
+        var size = Vector2.Clamp(scaledSize, minimumSize, maximumSize);
 
         var p = ImGui.GetWindowPos() +
                            DrawPosition +
@@ -851,10 +909,9 @@ public class MapWindow : Window, IDisposable
                       GetMapCenterOffsetVector()) * Scale;
 
         var angle = -camera->CalculateSceneCameraYaw() + MathF.PI * 1.5f;
-        var direction = AngleToDirection(angle);
-        const float halfConeAngle = MathF.PI / 5.5f;
-        var coneOrigin = center - direction * (7.0f * Scale);
-        var coneLength = 36.0f * Scale;
+        const float halfConeAngle = MathF.PI / 4.75f;
+        var coneOrigin = center;
+        var coneLength = 43.0f * Scale;
         var left = coneOrigin + AngleToDirection(angle - halfConeAngle) * coneLength;
         var right = coneOrigin + AngleToDirection(angle + halfConeAngle) * coneLength;
 
