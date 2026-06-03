@@ -70,7 +70,7 @@ public class MapWindow : Window, IDisposable
     private readonly BottomBar bottomBar;
     private string currentCursorPositionText = string.Empty;
 
-    
+
 
     public enum IconIds : int {
         Aetheryte = 60453,
@@ -86,7 +86,7 @@ public class MapWindow : Window, IDisposable
         Hover = 60429,
         MapChanger = 60441
     }
-    
+
     public bool IsMapMarker(int iconid) {
         if (iconid == (int)IconIds.Aetheryte || iconid == (int)IconIds.AethernetShard || iconid == (int)IconIds.SummoningBell || iconid == (int)IconIds.MarketBoard || iconid == (int)IconIds.CompanyChest)
             return true;
@@ -156,7 +156,7 @@ public class MapWindow : Window, IDisposable
     }
 
     public override void OnOpen() {
-        
+
         if (!configuration.CenterOnPlayerWhenOpening)
         {
             return;
@@ -260,15 +260,14 @@ public class MapWindow : Window, IDisposable
     }
 
     private void DrawMapBackground() {
-        RefreshCapturedAgentMapTransform();
-        var nextMapBgPath = GetCurrentMapBackgroundPath();
-        var nextMapFgPath = GetCurrentMapForegroundPath();
-        if (mapStateManager.currentMap.RowId != lastRenderedMapId ||
-            currentMapBgPath != nextMapBgPath ||
-            currentMapFgPath != nextMapFgPath)
+        if (mapStateManager.currentMap.RowId != lastRenderedMapId)
         {
-            currentMapBgPath = nextMapBgPath;
-            currentMapFgPath = nextMapFgPath;
+            var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
+            currentMapBgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}m_m.tex";
+            currentMapFgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}_m.tex";
+            // FIXME: ARR housing areas have black bg textures that need to be ignored...
+            if (mapStateManager.currentMap.RowId == 192 || mapStateManager.currentMap.RowId == 193 || mapStateManager.currentMap.RowId == 194)
+                currentMapBgPath = "";
             //log.Debug($"Drawing map BG: {mapBgPath} || FG: {mapFgPath}");
             //log.Debug($"OG Paths BG: {AgentMap.Instance()->SelectedMapBgPath} || FG: {AgentMap.Instance()->SelectedMapPath}");
             blendedTexture?.Dispose();
@@ -321,22 +320,7 @@ public class MapWindow : Window, IDisposable
         capturedAgentMapScaleFactor = agentMap->SelectedMapSizeFactorFloat;
     }
 
-    private string GetCurrentMapForegroundPath()
-    {
-        var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
-        return $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}_m.tex";
-    }
 
-    private string GetCurrentMapBackgroundPath()
-    {
-        if (mapStateManager.currentMap.RowId == 192 || mapStateManager.currentMap.RowId == 193 || mapStateManager.currentMap.RowId == 194)
-        {
-            return string.Empty;
-        }
-
-        var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
-        return $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}m_m.tex";
-    }
 
     private IDalamudTextureWrap? LoadTexture(string bgPath, string fgPath)
     {
