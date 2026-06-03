@@ -556,6 +556,8 @@ public class MapWindow : Window, IDisposable
             handledClickAndHover = DrawActorDot(obj);
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion)
             handledClickAndHover = DrawActorDot(obj);
+        else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Mount)
+            handledClickAndHover = DrawActorDot(obj);
         else
             DrawIcon((int)IconIds.Unknown, obj);
         if (handledClickAndHover)
@@ -592,6 +594,7 @@ public class MapWindow : Window, IDisposable
                 Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte => true,
                 Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc => configuration.DrawOtherPlayers,
                 Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion => configuration.DrawOtherPlayers,
+                Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Mount => configuration.DrawOtherPlayers,
                 _ => true,
             };
         }
@@ -928,6 +931,11 @@ public class MapWindow : Window, IDisposable
         if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Companion)
         {
             return new Vector4(1.0f, 0.72f, 0.18f, 0.95f);
+        }
+
+        if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Mount)
+        {
+            return new Vector4(0.78f, 0.48f, 1.0f, 0.95f);
         }
 
         return isFriend
