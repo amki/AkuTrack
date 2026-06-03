@@ -16,6 +16,10 @@ namespace AkuTrack.Windows
             var barSize = new Vector2(ImGui.GetContentRegionAvail().X, 30.0f * scale);
             using var childBackgroundStyle = ImRaii.PushColor(ImGuiCol.ChildBg, panelColor);
             using var topBar = ImRaii.Child("top_child", barSize, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+            if (!topBar)
+            {
+                return;
+            }
 
             ImGui.SetCursorPosY(4.0f * scale);
             ImGui.SetCursorPosX(8.0f * scale);

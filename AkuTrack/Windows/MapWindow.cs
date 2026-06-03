@@ -3,16 +3,19 @@ using AkuTrack.Managers;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Data.Files;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 
@@ -53,9 +56,12 @@ public class MapWindow : Window, IDisposable
 
     private List<AkuGameObject> clickedObjects = new();
     private List<Lumina.Excel.Sheets.MapMarker> clickedMarkers = new();
+    private HashSet<uint>? contentFinderTerritoryIds;
 
     private readonly MapContextMenu mapContextMenu = new();
+    private readonly TopBar topBar;
     private readonly BottomBar bottomBar;
+    private string currentCursorPositionText = string.Empty;
 
     
 
@@ -89,6 +95,7 @@ public class MapWindow : Window, IDisposable
         MapStateManager mapStateManager,
         ObjTrackManager objTrackManager,
         UploadManager uploadManager,
+        TopBar topBar,
         BottomBar bottomBar,
         WindowSystem windowSystem,
         IDataManager dataManager,
@@ -109,6 +116,7 @@ public class MapWindow : Window, IDisposable
         this.objectTable = objectTable;
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
+        this.topBar = topBar;
         this.bottomBar = bottomBar;
         this.windowSystem = windowSystem;
         this.textureProvider = textureProvider;
@@ -123,6 +131,17 @@ public class MapWindow : Window, IDisposable
     }
 
     public void Dispose() { }
+
+    public unsafe void CaptureSelectedMapFromAgent()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null || agentMap->SelectedMapId == 0)
+        {
+            return;
+        }
+
+        mapStateManager.SwitchMap(agentMap->SelectedMapId);
+    }
 
     public override void OnOpen() {
         
@@ -145,24 +164,64 @@ public class MapWindow : Window, IDisposable
             HoveredFlags |= HoverFlags.Window;
         }
 
-        using (var renderChild = ImRaii.Child("render_child", ImGui.GetContentRegionAvail(), false, ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoScrollbar))
+        topBar.Draw(GetCurrentMapDisplayPath(), GetTopBarCursorPositionText());
+
+        using (var childStyle = ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 0.0f))
+        using (var renderChild = ImRaii.Child("render_child", GetMapCanvasSize(), false, ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoScrollbar))
         {
             currentMapScreenPosition = ImGui.GetWindowPos();
             DrawMapElements();
             currentMapPixelSize = ImGui.GetWindowSize();
 
-            // Reset Draw Position for Overlay Extras
-            ImGui.SetCursorPos(Vector2.Zero);
-            //DrawToolbar();
-            bottomBar.Draw(HoveredFlags.HasFlag(HoverFlags.MapTexture), currentMapPixelSize, DrawPosition, DrawOffset, Scale);
+            if (ImGui.IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByPopup))
+            {
+                HoveredFlags |= HoverFlags.WindowInnerFrame;
+            }
         }
 
-
-        if (ImGui.IsItemHovered())
-        {
-            HoveredFlags |= HoverFlags.WindowInnerFrame;
-        }
+        bottomBar.Draw(HoveredFlags.HasFlag(HoverFlags.MapTexture), currentMapPixelSize, DrawPosition, DrawOffset, Scale, GetBottomBarPlayerPositionText());
         ProcessInputs();
+    }
+
+    private string GetCurrentMapDisplayPath()
+    {
+        var placeName = mapStateManager.currentMap.PlaceName.ValueNullable?.Name.ToString();
+        var territoryName = mapStateManager.currentMap.TerritoryType.ValueNullable?.PlaceName.ValueNullable?.Name.ToString();
+
+        if (!string.IsNullOrWhiteSpace(territoryName) && !string.Equals(territoryName, placeName, StringComparison.CurrentCultureIgnoreCase))
+        {
+            return $"{territoryName} / {placeName}";
+        }
+
+        return !string.IsNullOrWhiteSpace(placeName)
+            ? placeName
+            : $"Map {mapStateManager.currentMap.RowId}";
+    }
+
+    private string GetTopBarCursorPositionText()
+    {
+        if (IsMouseInsideMapCanvas())
+        {
+            var cursor = TexturePixelToIngameCoord(GetMouseMapCoordinate());
+            currentCursorPositionText = $"X:{cursor.X:F1} Y:{cursor.Y:F1}";
+        }
+
+        return currentCursorPositionText;
+    }
+
+    private Vector2 GetMapCanvasSize()
+    {
+        var scale = ImGuiHelpers.GlobalScale;
+        var footerHeight = 30.0f * scale;
+        var available = ImGui.GetContentRegionAvail();
+        return new Vector2(available.X, MathF.Max(120.0f * scale, available.Y - footerHeight));
+    }
+
+    private string GetBottomBarPlayerPositionText()
+    {
+        return mapStateManager.currentMap.RowId == clientState.MapId && objectTable.LocalPlayer is { } player
+            ? FormatPlayerMapPosition(player.Position)
+            : string.Empty;
     }
 
     private void DrawMapElements() {
@@ -279,12 +338,13 @@ public class MapWindow : Window, IDisposable
 
     private void DrawAkuObjects()
     {
-        if (configuration.DrawRemoteMarker)
+        var scope = GetCurrentContentScope();
+        if (ShouldDrawContent("RemoteMarker", scope))
         {
             foreach (var o in objTrackManager.downloadHashList)
             {
                 if (!objTrackManager.seenHashList.ContainsKey(o.Key))
-                    DrawAkuGameObject(o.Value);
+                    DrawAkuGameObject(o.Value, MapObjectSource.Downloaded, scope);
             }
         }
 
@@ -292,7 +352,7 @@ public class MapWindow : Window, IDisposable
         {
             foreach (var o in objTrackManager.liveAkuObjects)
             {
-                DrawAkuGameObject(o);
+                DrawAkuGameObject(o, MapObjectSource.SelfFound, scope);
             }
         }
     }
@@ -318,6 +378,7 @@ public class MapWindow : Window, IDisposable
     private void DrawMapMarkers() {
         try
         {
+            var scope = GetCurrentContentScope();
             var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(mapStateManager.currentMap.MapMarkerRange);
             foreach (var row in rows)
             {
@@ -326,6 +387,10 @@ public class MapWindow : Window, IDisposable
                     continue;
                 }
                 if (row.X == 0 && row.Y == 0)
+                {
+                    continue;
+                }
+                if (!ShouldDrawMapMarker(row.Icon, scope))
                 {
                     continue;
                 }
@@ -362,10 +427,14 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void DrawAkuGameObject(AkuGameObject obj) {
+    private void DrawAkuGameObject(AkuGameObject obj, MapObjectSource source, MapContentScope scope) {
         if (obj.mid != mapStateManager.currentMap.RowId)
             return;
-        if(!ShouldDrawObjectKind(obj.objectKind)) {
+        if(!ShouldDrawObjectKind(obj.objectKind, source, scope)) {
+            return;
+        }
+        if (IsLocalPlayerObject(obj))
+        {
             return;
         }
         if(mapStateManager.filterEnabled && mapStateManager.filterExpression != string.Empty) {
@@ -388,10 +457,17 @@ public class MapWindow : Window, IDisposable
         }
         if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc)
         {
+            if (ShouldHideDownloadedNpcWithoutUniqueIngameId(obj, source))
+                return;
             DrawIcon((int)IconIds.EventNpc, obj);
         }
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj)
         {
+            if (!configuration.IsObjectSourceEnabled(scope, "EventObj", source))
+                return;
+            var iconId = GetEventObjIconId(obj.bid);
+            if (!configuration.IsIconCategoryEntryEnabled(scope, "EventObj", iconId))
+                return;
             if (obj.bid == 2000401) // summoning bell
                 DrawIcon((int)IconIds.SummoningBell, obj);
             else if (obj.bid == 2000402) // market board
@@ -403,6 +479,8 @@ public class MapWindow : Window, IDisposable
         }
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
         {
+            if (ShouldHideDownloadedNpcWithoutUniqueIngameId(obj, source))
+                return;
             DrawIcon((int)IconIds.BattleNpc, obj);
         }
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte)
@@ -423,10 +501,15 @@ public class MapWindow : Window, IDisposable
                 log.Debug($"GatheringPoint {obj.bid} did not have a row in GatheringPoint sheet.");
                 return;
             }
-            DrawIcon(gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain, obj);
+            var iconId = (uint)gatheringPointRow.GatheringPointBase.Value.GatheringType.Value.IconMain;
+            if (!configuration.IsIconCategoryEntryEnabled(scope, "GatheringPoint", iconId))
+                return;
+            DrawIcon((int)iconId, obj);
         }
         else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure)
             DrawIcon((int)IconIds.Treasure, obj);
+        else if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
+            DrawPcDot(obj);
         else
             DrawIcon((int)IconIds.Unknown, obj);
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
@@ -437,21 +520,139 @@ public class MapWindow : Window, IDisposable
         if (ImGui.IsItemHovered())
         {
             DrawTooltip(obj);
-            DrawIcon((int)IconIds.Hover, obj);
+            if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
+            {
+                DrawPcDot(obj, true, false);
+            }
+            else
+            {
+                DrawIcon((int)IconIds.Hover, obj);
+            }
         }
     }
 
-    private bool ShouldDrawObjectKind(Dalamud.Game.ClientState.Objects.Enums.ObjectKind objectKind)
+    private bool ShouldDrawObjectKind(Dalamud.Game.ClientState.Objects.Enums.ObjectKind objectKind, MapObjectSource source, MapContentScope scope)
+    {
+        var category = GetObjectKindCategory(objectKind);
+        if (category is null)
+        {
+            return objectKind switch
+            {
+                Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte => true,
+                Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc => configuration.DrawOtherPlayers,
+                _ => true,
+            };
+        }
+
+        return configuration.IsObjectSourceEnabled(scope, category, source) && ShouldDrawContent(category, scope);
+    }
+
+    private static string? GetObjectKindCategory(Dalamud.Game.ClientState.Objects.Enums.ObjectKind objectKind)
     {
         return objectKind switch
         {
-            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc => configuration.DrawENpc,
-            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj => configuration.DrawEObj,
-            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc => configuration.DrawBNpc,
-            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint => configuration.DrawGatheringPoint,
-            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure => configuration.DrawTreasure,
+            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc => "EventNpc",
+            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj => "EventObj",
+            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc => "BattleNpc",
+            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.GatheringPoint => "GatheringPoint",
+            Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Treasure => "Treasure",
+            _ => null,
+        };
+    }
+
+    private bool ShouldHideDownloadedNpcWithoutUniqueIngameId(AkuGameObject obj, MapObjectSource source)
+    {
+        return source == MapObjectSource.Downloaded
+            && configuration.OnlyDrawDownloadedNpcsWithUniqueIngameId
+            && (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc ||
+                obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
+            && obj.unique_ingame_id is null;
+    }
+
+    private MapContentScope GetCurrentContentScope()
+    {
+        var territoryId = mapStateManager.currentMap.TerritoryType.RowId;
+        return IsContentFinderTerritory(territoryId) ? MapContentScope.ContentFinder : MapContentScope.World;
+    }
+
+    private bool IsContentFinderTerritory(uint territoryId)
+    {
+        if (contentFinderTerritoryIds is null)
+        {
+            contentFinderTerritoryIds = dataManager.GetExcelSheet<Lumina.Excel.Sheets.ContentFinderCondition>()
+                .Where(row => row.RowId != 0 && row.TerritoryType.RowId != 0)
+                .Select(row => row.TerritoryType.RowId)
+                .ToHashSet();
+        }
+
+        return territoryId != 0 && contentFinderTerritoryIds.Contains(territoryId);
+    }
+
+    private bool ShouldDrawContent(string category, MapContentScope scope)
+    {
+        return scope switch
+        {
+            MapContentScope.World => category switch
+            {
+                "BattleNpc" => configuration.DrawBNpc,
+                "CriticalEngagements" => configuration.DrawCriticalEngagements,
+                "EventNpc" => configuration.DrawENpc,
+                "EventObj" => configuration.DrawEObj,
+                "FATE" => configuration.DrawFates,
+                "GatheringPoint" => configuration.DrawGatheringPoint,
+                "HousingMapMarkerInfo" => configuration.DrawHousingMapMarkers,
+                "MapMarkerLabelsOnly" => configuration.DrawMapMarkerLabelsOnly,
+                "MapMarkersWithIcons" => configuration.DrawMapMarkersWithIcons,
+                "RemoteMarker" => configuration.DrawRemoteMarker,
+                "SightseeingLog" => configuration.DrawSightseeingLogEntries,
+                "Treasure" => configuration.DrawTreasure,
+                "TreasureMaps" => configuration.DrawTreasureMaps,
+                _ => true,
+            },
+            MapContentScope.ContentFinder => category switch
+            {
+                "BattleNpc" => configuration.DrawContentFinderBNpc,
+                "CriticalEngagements" => configuration.DrawContentFinderCriticalEngagements,
+                "EventNpc" => configuration.DrawContentFinderENpc,
+                "EventObj" => configuration.DrawContentFinderEObj,
+                "FATE" => configuration.DrawContentFinderFates,
+                "GatheringPoint" => configuration.DrawContentFinderGatheringPoint,
+                "HousingMapMarkerInfo" => configuration.DrawContentFinderHousingMapMarkers,
+                "MapMarkerLabelsOnly" => configuration.DrawContentFinderMapMarkerLabelsOnly,
+                "MapMarkersWithIcons" => configuration.DrawContentFinderMapMarkersWithIcons,
+                "RemoteMarker" => configuration.DrawContentFinderRemoteMarker,
+                "SightseeingLog" => configuration.DrawContentFinderSightseeingLogEntries,
+                "Treasure" => configuration.DrawContentFinderTreasure,
+                "TreasureMaps" => configuration.DrawContentFinderTreasureMaps,
+                _ => true,
+            },
             _ => true,
         };
+    }
+
+    private bool ShouldDrawMapMarker(uint iconId, MapContentScope scope)
+    {
+        var category = IsRegionIcon((int)iconId) ? "MapMarkerLabelsOnly" : "MapMarkersWithIcons";
+        return ShouldDrawContent(category, scope);
+    }
+
+    private static uint GetEventObjIconId(uint baseId)
+    {
+        return baseId switch
+        {
+            2000401 => (uint)IconIds.SummoningBell,
+            2000402 => (uint)IconIds.MarketBoard,
+            2000470 => (uint)IconIds.CompanyChest,
+            2007457 => 60033,
+            _ => (uint)IconIds.EventObj,
+        };
+    }
+
+    private bool IsLocalPlayerObject(AkuGameObject obj)
+    {
+        return obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc &&
+            objectTable.LocalPlayer is { } localPlayer &&
+            obj.unique_ingame_id == localPlayer.GameObjectId;
     }
 
     public void DrawAkuObjectContextMenu(List<AkuGameObject> objs, List<Lumina.Excel.Sheets.MapMarker> markers)
@@ -506,6 +707,28 @@ public class MapWindow : Window, IDisposable
             ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, new Vector4(0.5f, 0.5f, 0.5f, 0.5f));
         else
             ImGui.Image(texture.Handle, texture.Size / 2.0f, Vector2.Zero, Vector2.One, new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    }
+
+    private void DrawPcDot(AkuGameObject obj, bool hover = false, bool interactive = true)
+    {
+        var center = currentMapScreenPosition +
+                     DrawPosition +
+                     (GetPlayerMapPosition(obj.pos) +
+                      GetMapOffsetVector() +
+                      GetMapCenterOffsetVector()) * Scale;
+        var radius = hover ? 5.0f : 4.0f;
+        var fillColor = ImGui.GetColorU32(new Vector4(0.18f, 0.62f, 1.0f, 1.0f));
+        var outlineColor = ImGui.GetColorU32(new Vector4(0.02f, 0.18f, 0.45f, 1.0f));
+
+        if (interactive)
+        {
+            ImGui.SetCursorScreenPos(center - new Vector2(radius));
+            ImGui.InvisibleButton($"##pc_dot_{obj.unique_ingame_id}_{obj.uuid}", new Vector2(radius * 2.0f));
+        }
+
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddCircleFilled(center, radius, fillColor, 16);
+        drawList.AddCircle(center, radius, outlineColor, 16, MathF.Max(1.0f, Scale));
     }
 
     private void DrawMapIcon(int iconid, Vector2 position, float rotation, string text, byte subtextOrientation)
@@ -720,6 +943,34 @@ public class MapWindow : Window, IDisposable
         }
 
         DrawOffset = -(GetPlayerMapPosition(localPlayer.Position) + GetMapOffsetVector());
+    }
+
+    private string FormatPlayerMapPosition(Vector3 worldPosition)
+    {
+        var mapPosition = TexturePixelToIngameCoord(GetMapCoordinateFor3D(worldPosition));
+        return $"X:{mapPosition.X:F1} Y:{mapPosition.Y:F1} Z:{worldPosition.Y:F1}";
+    }
+
+    private Vector2 GetMouseMapCoordinate()
+    {
+        return (ImGui.GetMousePos() - currentMapScreenPosition - DrawPosition) / Scale;
+    }
+
+    private bool IsMouseInsideMapCanvas()
+    {
+        return HoveredFlags.HasFlag(HoverFlags.Window) &&
+            IsBoundedBy(ImGui.GetMousePos(), currentMapScreenPosition, currentMapScreenPosition + currentMapPixelSize);
+    }
+
+    private Vector2 TexturePixelToIngameCoord(Vector2 textureCoord)
+    {
+        var tmp = (textureCoord - GetMapCenterOffsetVector()) / GetMapScaleFactor() - GetRawMapOffsetVector();
+        var result = new Vector2(0, 0);
+        tmp.X *= GetMapScaleFactor();
+        tmp.Y *= GetMapScaleFactor();
+        result.X = (float)Math.Round(((41.0f / GetMapScaleFactor() * ((tmp.X + 1024.0f) / 2048.0f) + 1) * 100) / 100, 1);
+        result.Y = (float)Math.Round(((41.0f / GetMapScaleFactor() * ((tmp.Y + 1024.0f) / 2048.0f) + 1) * 100) / 100, 1);
+        return result;
     }
 
     private static Vector2[] GetRotationVectors(float angle, Vector2 center, Vector2 size)
