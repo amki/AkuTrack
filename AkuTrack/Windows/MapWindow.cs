@@ -232,9 +232,19 @@ public class MapWindow : Window, IDisposable
             HoveredFlags |= HoverFlags.MapTexture;
         }
 
+        var drawPlayerMarkersInBackground = ImGui.GetIO().KeyCtrl;
+        if (drawPlayerMarkersInBackground)
+        {
+            DrawPlayerAndCone();
+        }
+
         DrawAkuObjects();
-        DrawPlayerAndCone();
         DrawMapMarkers();
+
+        if (!drawPlayerMarkersInBackground)
+        {
+            DrawPlayerAndCone();
+        }
     }
 
     private void DrawMapBackground() {
@@ -382,10 +392,6 @@ public class MapWindow : Window, IDisposable
             var rows = dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>().GetRow(mapStateManager.currentMap.MapMarkerRange);
             foreach (var row in rows)
             {
-                if (IsMapMarker(row.Icon))
-                {
-                    continue;
-                }
                 if (row.X == 0 && row.Y == 0)
                 {
                     continue;
@@ -808,6 +814,9 @@ public class MapWindow : Window, IDisposable
     {
         var texture = textureProvider.GetFromGameIcon(60443).GetWrapOrEmpty();
         var angle = -rotation + MathF.PI / 2.0f;
+        var scaledSize = texture.Size / 2.0f * Scale;
+        var minimumSize = new Vector2(36.0f * ImGuiHelpers.GlobalScale);
+        var size = new Vector2(MathF.Max(scaledSize.X, minimumSize.X), MathF.Max(scaledSize.Y, minimumSize.Y));
 
         var p = ImGui.GetWindowPos() +
                            DrawPosition +
@@ -815,7 +824,7 @@ public class MapWindow : Window, IDisposable
                             GetMapOffsetVector() +
                             GetMapCenterOffsetVector()) * Scale;
         //var p = ((GetMapCoordinateFor3D(pos)) * Scale) + DrawPosition - (texture.Size / 4.0f * Scale);
-        var vectors = GetRotationVectors(angle, p, texture.Size / 2.0f * Scale);
+        var vectors = GetRotationVectors(angle, p, size);
 
         //log.Debug($"@ {position} Drawing to {p} with scale {Scale} DrawPosition: {DrawPosition}");
         ImGui.GetWindowDrawList().AddImageQuad(texture.Handle, vectors[0], vectors[1], vectors[2], vectors[3]);
@@ -897,7 +906,7 @@ public class MapWindow : Window, IDisposable
         // Don't allow a drag to start if the window size is changing
         if (ImGui.GetWindowSize() == lastWindowSize && HoveredFlags != HoverFlags.Nothing)
         {
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Left) && !isDragStarted)
+            if (HoveredFlags.HasFlag(HoverFlags.MapTexture) && ImGui.IsMouseClicked(ImGuiMouseButton.Left) && !isDragStarted)
             {
                 isDragStarted = true;
                 //System.SystemConfig.FollowPlayer = false;
