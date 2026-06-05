@@ -142,7 +142,7 @@ namespace AkuTrack.Managers
             foreach (var obj in input)
             {
                 if(currentMapDownloadHashList.ContainsKey(obj.GetUniqueId())) {
-                    log.Debug($"Not uploading {obj.bid} ({obj.GetUniqueId()}) because it was in download.");
+                    log.Verbose($"Not uploading {obj.bid} ({obj.GetUniqueId()}) because it was in download.");
                     continue;
                 }
                 res.Add(obj);
