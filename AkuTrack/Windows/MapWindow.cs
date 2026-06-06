@@ -55,6 +55,9 @@ public class MapWindow : Window, IDisposable
     private string capturedAgentMapFgPath = string.Empty;
     private Vector2 capturedAgentRawMapOffset;
     private float capturedAgentMapScaleFactor;
+    private uint pendingPlacedMarkerFocusMapId;
+    private Vector2 pendingPlacedMarkerFocusPosition;
+    private int pendingPlacedMarkerFocusFrames;
 
     private Vector2 currentMapPixelSize = new(0, 0);
     private Vector2 currentMapScreenPosition = new(0, 0);
@@ -152,6 +155,7 @@ public class MapWindow : Window, IDisposable
         capturedAgentMapBgPath = agentMap->SelectedMapBgPath.ToString();
         capturedAgentRawMapOffset = new Vector2(agentMap->SelectedOffsetX * -1, agentMap->SelectedOffsetY * -1);
         capturedAgentMapScaleFactor = agentMap->SelectedMapSizeFactorFloat;
+        CapturePlacedMapMarkerFocus(agentMap);
         mapStateManager.SwitchMap(agentMap->SelectedMapId);
     }
 
@@ -167,6 +171,7 @@ public class MapWindow : Window, IDisposable
 
     public override void Draw()
     {
+        FocusPendingPlacedMapMarker();
         UpdateDrawOffset();
 
         HoveredFlags = HoverFlags.Nothing;
@@ -252,6 +257,7 @@ public class MapWindow : Window, IDisposable
 
         DrawAkuObjects();
         DrawMapMarkers();
+        DrawPlacedMapMarkers();
 
         if (!drawPlayerMarkersInBackground)
         {
@@ -468,6 +474,148 @@ public class MapWindow : Window, IDisposable
             // FIXME: How to get markers from region maps?!?
             //log.Debug($"Could not find Markers for Territory {currentTerritory}");
         }
+    }
+
+    private unsafe void DrawPlacedMapMarkers()
+    {
+        var agentMap = AgentMap.Instance();
+        if (agentMap == null)
+        {
+            return;
+        }
+
+        if (agentMap->SelectedMapId != mapStateManager.currentMap.RowId && agentMap->CurrentMapId != mapStateManager.currentMap.RowId)
+        {
+            return;
+        }
+
+        for (var i = 0; i < agentMap->TempMapMarkerCount && i < agentMap->TempMapMarkers.Length; i++)
+        {
+            var marker = agentMap->TempMapMarkers[i];
+            DrawPlacedMapMarker(marker);
+        }
+    }
+
+    private void DrawPlacedMapMarker(TempMapMarker tempMarker)
+    {
+        var marker = tempMarker.MapMarker;
+        var position = GetMapPositionForMarker(marker);
+        if (!IsBoundedBy(position, Vector2.Zero, new Vector2(2048, 2048)))
+        {
+            return;
+        }
+
+        DrawPlacedMapMarkerRadius(position, marker.Scale);
+
+        var iconId = marker.IconId != 0 ? marker.IconId : marker.SecondaryIconId;
+        if (iconId != 0)
+        {
+            DrawPlacedMapMarkerIcon((int)iconId, position, tempMarker.TooltipText.ToString());
+        }
+    }
+
+    private void DrawPlacedMapMarkerRadius(Vector2 mapPosition, int radius)
+    {
+        if (radius <= 0)
+        {
+            return;
+        }
+
+        var center = currentMapScreenPosition + DrawPosition + mapPosition * Scale;
+        var scaledRadius = radius * Scale;
+        if (scaledRadius <= 1.0f)
+        {
+            return;
+        }
+
+        var drawList = ImGui.GetWindowDrawList();
+        var fillColor = ImGui.GetColorU32(new Vector4(0.02f, 0.26f, 0.09f, 0.42f));
+        var lineColor = ImGui.GetColorU32(new Vector4(0.08f, 0.46f, 0.16f, 0.9f));
+        drawList.AddCircleFilled(center, scaledRadius, fillColor, 64);
+        drawList.AddCircle(center, scaledRadius, lineColor, 64, MathF.Max(1.0f, ImGuiHelpers.GlobalScale));
+    }
+
+    private void DrawPlacedMapMarkerIcon(int iconId, Vector2 mapPosition, string tooltip)
+    {
+        var texture = textureProvider.GetFromGameIcon(iconId).GetWrapOrEmpty();
+        var size = texture.Size / 2.0f;
+        var p = mapPosition * Scale + DrawPosition - size / 2.0f;
+
+        ImGui.SetCursorPos(p);
+        ImGui.Image(texture.Handle, size);
+        if (ImGui.IsItemHovered() && IsMouseInsideMapCanvas() && !string.IsNullOrWhiteSpace(tooltip))
+        {
+            ImGui.SetTooltip(tooltip);
+        }
+    }
+
+    private Vector2 GetMapPositionForMarker(MapMarkerBase marker)
+    {
+        var rawPosition = new Vector2(marker.X, marker.Y);
+        if (IsBoundedBy(rawPosition, Vector2.Zero, new Vector2(2048, 2048)))
+        {
+            return rawPosition;
+        }
+
+        var worldPosition = new Vector3(marker.X / 16.0f, 0, marker.Y / 16.0f);
+        var mapPosition = GetMapCoordinateFor3D(worldPosition);
+        if (IsBoundedBy(mapPosition, Vector2.Zero, new Vector2(2048, 2048)))
+        {
+            return mapPosition;
+        }
+
+        return rawPosition / 16.0f;
+    }
+
+    private unsafe void CapturePlacedMapMarkerFocus(AgentMap* agentMap)
+    {
+        var mapId = agentMap->SelectedMapId != 0 ? agentMap->SelectedMapId : agentMap->CurrentMapId;
+        if (mapId == 0 || !TryGetPlacedMapMarkerFocus(agentMap, out var focusPosition))
+        {
+            return;
+        }
+
+        pendingPlacedMarkerFocusMapId = mapId;
+        pendingPlacedMarkerFocusPosition = focusPosition;
+        pendingPlacedMarkerFocusFrames = 30;
+    }
+
+    private unsafe bool TryGetPlacedMapMarkerFocus(AgentMap* agentMap, out Vector2 focusPosition)
+    {
+        focusPosition = Vector2.Zero;
+        var largestRadius = 0;
+
+        for (var i = 0; i < agentMap->TempMapMarkerCount && i < agentMap->TempMapMarkers.Length; i++)
+        {
+            var marker = agentMap->TempMapMarkers[i].MapMarker;
+            var position = GetMapPositionForMarker(marker);
+            if (marker.Scale <= largestRadius || !IsBoundedBy(position, Vector2.Zero, new Vector2(2048, 2048)))
+            {
+                continue;
+            }
+
+            largestRadius = marker.Scale;
+            focusPosition = position;
+        }
+
+        return largestRadius > 0;
+    }
+
+    private void FocusPendingPlacedMapMarker()
+    {
+        if (pendingPlacedMarkerFocusFrames <= 0)
+        {
+            return;
+        }
+
+        if (pendingPlacedMarkerFocusMapId != mapStateManager.currentMap.RowId)
+        {
+            pendingPlacedMarkerFocusFrames--;
+            return;
+        }
+
+        DrawOffset = GetMapCenterOffsetVector() - pendingPlacedMarkerFocusPosition;
+        pendingPlacedMarkerFocusFrames = 0;
     }
 
     private void DrawAkuGameObject(AkuGameObject obj, MapObjectSource source, MapContentScope scope) {
