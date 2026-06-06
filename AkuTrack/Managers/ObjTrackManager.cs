@@ -154,7 +154,7 @@ namespace AkuTrack.Managers
             {
                 var uniqueId = obj.GetUniqueId();
                 if(uniqueId is not null && currentMapDownloadHashList.ContainsKey(uniqueId)) {
-                    log.Debug($"Not uploading {obj.bid} ({uniqueId}) because it was in download.");
+                    log.Verbose($"Not uploading {obj.bid} ({uniqueId}) because it was in download.");
                     continue;
                 }
                 res.Add(obj);

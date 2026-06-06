@@ -259,7 +259,7 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void DrawMapBackground() {
+    private unsafe void DrawMapBackground() {
         if (mapStateManager.currentMap.RowId != lastRenderedMapId)
         {
             var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
@@ -268,8 +268,8 @@ public class MapWindow : Window, IDisposable
             // FIXME: ARR housing areas have black bg textures that need to be ignored...
             if (mapStateManager.currentMap.RowId == 192 || mapStateManager.currentMap.RowId == 193 || mapStateManager.currentMap.RowId == 194)
                 currentMapBgPath = "";
-            //log.Debug($"Drawing map BG: {mapBgPath} || FG: {mapFgPath}");
-            //log.Debug($"OG Paths BG: {AgentMap.Instance()->SelectedMapBgPath} || FG: {AgentMap.Instance()->SelectedMapPath}");
+            log.Debug($"Drawing map BG: {currentMapBgPath} || FG: {currentMapFgPath} RowId {mapStateManager.currentMap.RowId} ScaleFactor: {GetMapScaleFactor()} OffsetX: {GetRawMapOffsetVector().X} OffsetY: {GetRawMapOffsetVector().Y}");
+            log.Debug($"OG Paths BG: {AgentMap.Instance()->SelectedMapBgPath} || FG: {AgentMap.Instance()->SelectedMapPath} ScaleFactor: {AgentMap.Instance()->SelectedMapSizeFactor} OffsetX: {AgentMap.Instance()->SelectedOffsetX * -1} OffsetY {AgentMap.Instance()->SelectedOffsetY * -1}");
             blendedTexture?.Dispose();
             var loadedTexture = LoadTexture(currentMapBgPath, currentMapFgPath);
             if (loadedTexture is not null)
@@ -1249,7 +1249,7 @@ public class MapWindow : Window, IDisposable
             return capturedAgentMapScaleFactor;
         }
 
-        return mapStateManager.currentMap.SizeFactor / 100;
+        return (float)mapStateManager.currentMap.SizeFactor / 100.0f;
     }
 
     /// <summary>
