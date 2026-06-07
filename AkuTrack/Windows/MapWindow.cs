@@ -56,6 +56,7 @@ public class MapWindow : Window, IDisposable
     private List<Lumina.Excel.Sheets.MapMarker> clickedMarkers = new();
 
     private readonly MapContextMenu mapContextMenu = new();
+    private readonly TopBar topBar;
     private readonly BottomBar bottomBar;
 
     
@@ -90,6 +91,7 @@ public class MapWindow : Window, IDisposable
         MapStateManager mapStateManager,
         ObjTrackManager objTrackManager,
         UploadManager uploadManager,
+        TopBar topBar,
         BottomBar bottomBar,
         WindowSystem windowSystem,
         IDataManager dataManager,
@@ -110,6 +112,7 @@ public class MapWindow : Window, IDisposable
         this.objectTable = objectTable;
         this.objTrackManager = objTrackManager;
         this.uploadManager = uploadManager;
+        this.topBar = topBar;
         this.bottomBar = bottomBar;
         this.windowSystem = windowSystem;
         this.textureProvider = textureProvider;
@@ -151,11 +154,9 @@ public class MapWindow : Window, IDisposable
             currentMapScreenPosition = ImGui.GetWindowPos();
             DrawMapElements();
             currentMapPixelSize = ImGui.GetWindowSize();
-
-            // Reset Draw Position for Overlay Extras
-            ImGui.SetCursorPos(Vector2.Zero);
-            //DrawToolbar();
+            
             bottomBar.Draw(HoveredFlags.HasFlag(HoverFlags.MapTexture), currentMapPixelSize, DrawPosition, DrawOffset, Scale);
+            topBar.Draw(HoveredFlags.HasFlag(HoverFlags.MapTexture), currentMapPixelSize, DrawPosition, DrawOffset, Scale);
         }
 
 

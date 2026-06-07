@@ -1,3 +1,4 @@
+using System;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
 
@@ -12,6 +13,18 @@ namespace AkuTrack.Managers
 
         public string filterExpression = string.Empty;
         public bool filterEnabled = false;
+        
+        public event Action<uint> RegionSelectedItemChanged;
+        public event Action<uint> PlaceSelectedItemChanged;
+
+        public enum FilteredRegions : uint
+        {
+            Null = 0,
+            Hydaelin = 20,
+            Eorzea = 21,
+            TheSource = 3700,
+            TheFirst = 3701
+        }
 
         public Map currentMap { get; private set; }
 
@@ -25,6 +38,16 @@ namespace AkuTrack.Managers
             this.objTrackManager = objTrackManager;
             clientState.MapIdChanged += MapChanged;
             SwitchMap(clientState.MapId);
+        }
+
+        public void RegionChange(uint rowId)
+        {
+            RegionSelectedItemChanged?.Invoke(rowId);
+        }
+        
+        public void PlaceChange(uint rowId)
+        {
+            PlaceSelectedItemChanged?.Invoke(rowId);
         }
 
         private async void MapChanged(uint newMapId)
