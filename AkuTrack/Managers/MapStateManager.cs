@@ -14,9 +14,11 @@ namespace AkuTrack.Managers
         public string filterExpression = string.Empty;
         public bool filterEnabled = false;
         
-        public event Action<uint> RegionSelectedItemChanged;
-        public event Action<uint> PlaceSelectedItemChanged;
-
+        public event Action<uint>? RegionSelectedItemChanged;
+        public event Action<uint>? PlaceSelectedItemChanged;
+        
+        public event Action<uint>? SubSelectedItemChanged;
+        
         public enum FilteredRegions : uint
         {
             Null = 0,
@@ -48,6 +50,11 @@ namespace AkuTrack.Managers
         public void PlaceChange(uint rowId)
         {
             PlaceSelectedItemChanged?.Invoke(rowId);
+        }
+        
+        public void SubChange(uint rowId)
+        {
+            SubSelectedItemChanged?.Invoke(rowId);
         }
 
         private async void MapChanged(uint newMapId)

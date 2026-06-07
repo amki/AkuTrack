@@ -47,6 +47,7 @@ namespace AkuTrack.Windows
 
             mapStateManager.RegionSelectedItemChanged += RegionChanged;
             mapStateManager.PlaceSelectedItemChanged += PlaceChanged;
+            mapStateManager.SubSelectedItemChanged += SubChanged;
 
             var mapSheet = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>();
             foreach (var map in mapSheet)
@@ -82,19 +83,20 @@ namespace AkuTrack.Windows
             log.Debug($"The place has been changed to {rowId}");
             var name = dataManager.GetExcelSheet<Map>().First(x => x.RowId == rowId).PlaceName.Value.Name.ToString();
             var s = dataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>().Where(x => x.PlaceName.Value.Name.ToString() == name).ToList();
+            subs.Clear();
+            selectedSubsIndex = 0;
             if (s.Count > 1)
             {
-                subs.Clear();
                 foreach (var place in s)
                 {
                     subs.Add(place.RowId,$"{place.PlaceNameSub.Value.Name.ToString()} ({place.RowId})");
                 }
             }
-            else
-            {
-                subs.Clear();
-                selectedSubsIndex = 0;
-            }
+            mapStateManager.SwitchMap(rowId);
+        }
+
+        private void SubChanged(uint rowId)
+        {
             mapStateManager.SwitchMap(rowId);
         }
         
@@ -165,7 +167,7 @@ namespace AkuTrack.Windows
                                 if (ImGui.Selectable(kvp.Value, isSelected))
                                 {
                                     selectedSubsIndex = i;
-                                    mapStateManager.PlaceChange(subs.ElementAt(selectedSubsIndex).Key);
+                                    mapStateManager.SubChange(subs.ElementAt(selectedSubsIndex).Key);
                                 }
                                 if (isSelected)
                                     ImGui.SetItemDefaultFocus(); // scrolls into view on first open
