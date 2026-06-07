@@ -23,7 +23,13 @@ namespace AkuTrack.Managers
             this.clientState = clientState;
             this.dataManager = dataManager;
             this.objTrackManager = objTrackManager;
+            clientState.MapIdChanged += MapChanged;
             SwitchMap(clientState.MapId);
+        }
+
+        private async void MapChanged(uint newMapId)
+        {
+            SwitchMap(newMapId);
         }
 
         public async void SwitchMap(uint mapId) {
@@ -32,7 +38,7 @@ namespace AkuTrack.Managers
             objTrackManager.downloadHashList.Clear();
             foreach (var obj in objs)
             {
-                objTrackManager.downloadHashList.TryAdd(obj.GetUniqueId(), obj);    
+                objTrackManager.downloadHashList.TryAdd(obj.GetUniqueId()!, obj);    
             }
         }
     }

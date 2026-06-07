@@ -73,7 +73,7 @@ namespace AkuTrack.Managers
             currentMapDownloadHashList.Clear();
             foreach (var obj in objs)
             {
-                currentMapDownloadHashList.TryAdd(obj.GetUniqueId(), obj);
+                currentMapDownloadHashList.TryAdd(obj.GetUniqueId()!, obj);
             }
             isDownloadActive = false;
         }
@@ -141,7 +141,7 @@ namespace AkuTrack.Managers
             List<AkuGameObject> res = new();
             foreach (var obj in input)
             {
-                if(currentMapDownloadHashList.ContainsKey(obj.GetUniqueId())) {
+                if(currentMapDownloadHashList.ContainsKey(obj.GetUniqueId()!)) {
                     log.Verbose($"Not uploading {obj.bid} ({obj.GetUniqueId()}) because it was in download.");
                     continue;
                 }

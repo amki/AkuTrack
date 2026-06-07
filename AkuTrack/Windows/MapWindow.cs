@@ -39,7 +39,7 @@ public class MapWindow : Window, IDisposable
     public HoverFlags HoveredFlags { get; private set; }
     public Vector2 DrawPosition { get; private set; }
     private Vector2 lastWindowSize;
-    private bool isDragStarted = false;
+    private bool isDragStarted;
 
     private IDalamudTextureWrap? blendedTexture;
     private uint lastRenderedMapId;
@@ -377,10 +377,10 @@ public class MapWindow : Window, IDisposable
             {
                 doDraw = true;
             }
-            if(obj.nid is not null && obj.nid.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase)) {
+            if(obj.nid is not null && obj.nid.ToString()!.Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase)) {
                 doDraw = true;
             }
-            if (obj.npiid is not null && obj.npiid.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase))
+            if (obj.npiid is not null && obj.npiid.ToString()!.Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase))
             {
                 doDraw = true;
             }

@@ -117,7 +117,7 @@ public class MainWindow : Window, IDisposable
 
     private void DrawAkuGameObject(AkuGameObject o) {
         string headerText = string.Empty;
-        if(objTrackManager.downloadHashList.ContainsKey(o.GetUniqueId())) {
+        if(objTrackManager.downloadHashList.ContainsKey(o.GetUniqueId()!)) {
             headerText = $"[D] [{o.bid}] {o.name}";
         } else {
             headerText = $"[{o.bid}] {o.name}";
