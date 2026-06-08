@@ -20,6 +20,7 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
+using Lumina.Excel.Sheets;
 
 namespace AkuTrack.Windows;
 
@@ -873,19 +874,40 @@ public class MapWindow : Window, IDisposable
 
         foreach (var obj in objs)
         {
-            if (ImGui.MenuItem($"{obj.t} {obj.name}({obj.bid})"))
+            if (obj.objectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Mount)
             {
-                string newName = $"akutrack_details_{obj.bid}";
-                foreach (var w in windowSystem.Windows)
+                var name = dataManager.GetExcelSheet<Mount>().First(x => x.ModelChara.RowId == obj.moid).Singular.ToString();
+                if (ImGui.MenuItem($"{obj.t} {name}({obj.moid})"))
                 {
-                    var wName = w.WindowName.Split("##")[1];
-                    if (wName == newName)
-                        return;
-                }
-                var dw = ActivatorUtilities.CreateInstance<DetailsWindow>(plugin.serviceProvider, new object[] { obj });
-                windowSystem.AddWindow(dw);
-                dw.Toggle();
+                    string newName = $"akutrack_details_{obj.bid}";
+                    foreach (var w in windowSystem.Windows)
+                    {
+                        var wName = w.WindowName.Split("##")[1];
+                        if (wName == newName)
+                            return;
+                    }
+                    var dw = ActivatorUtilities.CreateInstance<DetailsWindow>(plugin.serviceProvider, new object[] { obj });
+                    windowSystem.AddWindow(dw);
+                    dw.Toggle();
+                }                
             }
+            else
+            {
+                if (ImGui.MenuItem($"{obj.t} {obj.name}({obj.bid})"))
+                {
+                    string newName = $"akutrack_details_{obj.bid}";
+                    foreach (var w in windowSystem.Windows)
+                    {
+                        var wName = w.WindowName.Split("##")[1];
+                        if (wName == newName)
+                            return;
+                    }
+                    var dw = ActivatorUtilities.CreateInstance<DetailsWindow>(plugin.serviceProvider, new object[] { obj });
+                    windowSystem.AddWindow(dw);
+                    dw.Toggle();
+                }
+            }
+            
         }
         foreach(var mark in markers) {
             if(ImGui.MenuItem($"MapMarker ({mark.RowId}.{mark.SubrowId}) {mark.PlaceNameSubtext.Value.Name.ToString()}")) {
