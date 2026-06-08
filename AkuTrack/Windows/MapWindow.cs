@@ -52,6 +52,8 @@ public class MapWindow : Window, IDisposable
     private bool isBlendedTexture;
     private string currentMapBgPath;
     private string currentMapFgPath;
+    private uint localCategoryMarkerCacheMap;
+    private List<LocalMapCategoryMarker> localCategoryMarkerCache = new();
     private uint capturedAgentMapId;
     private string capturedAgentMapBgPath = string.Empty;
     private string capturedAgentMapFgPath = string.Empty;
@@ -74,6 +76,14 @@ public class MapWindow : Window, IDisposable
     private readonly TopBar topBar;
     private readonly BottomBar bottomBar;
     private string currentCursorPositionText = string.Empty;
+
+    private readonly record struct LocalMapCategoryMarker(
+        string Category,
+        uint RowId,
+        string Name,
+        uint IconId,
+        Vector3 Position,
+        float Radius);
 
 
 
@@ -265,6 +275,7 @@ public class MapWindow : Window, IDisposable
 
         DrawAkuObjects();
         DrawMapMarkers();
+        DrawLocalCategoryMarkers();
         DrawPlacedMapMarkers();
 
         if (!drawPlayerMarkersInBackground)
@@ -279,11 +290,7 @@ public class MapWindow : Window, IDisposable
             var idSplits = mapStateManager.currentMap.Id.ToString().Split('/');
             currentMapBgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}m_m.tex";
             currentMapFgPath = $"ui/map/{idSplits[0]}/{idSplits[1]}/{idSplits[0]}{idSplits[1]}_m.tex";
-            // FIXME: ARR housing areas have black bg textures that need to be ignored...
-            if (mapStateManager.currentMap.RowId == 192 || mapStateManager.currentMap.RowId == 193 || mapStateManager.currentMap.RowId == 194)
-                currentMapBgPath = "";
             log.Debug($"Drawing map BG: {currentMapBgPath} || FG: {currentMapFgPath} RowId {mapStateManager.currentMap.RowId} ScaleFactor: {GetMapScaleFactor()} OffsetX: {GetRawMapOffsetVector().X} OffsetY: {GetRawMapOffsetVector().Y}");
-            log.Debug($"OG Paths BG: {AgentMap.Instance()->SelectedMapBgPath} || FG: {AgentMap.Instance()->SelectedMapPath} ScaleFactor: {AgentMap.Instance()->SelectedMapSizeFactor} OffsetX: {AgentMap.Instance()->SelectedOffsetX * -1} OffsetY {AgentMap.Instance()->SelectedOffsetY * -1}");
             blendedTexture?.Dispose();
             var loadedTexture = LoadTexture(currentMapBgPath, currentMapFgPath);
             if (loadedTexture is not null)
@@ -350,6 +357,12 @@ public class MapWindow : Window, IDisposable
         var backgroundBytes = bgFile.GetRgbaImageData();
         var foregroundBytes = fgFile.GetRgbaImageData();
 
+        if (IsEffectivelyEmptyMapLayer(backgroundBytes))
+        {
+            log.Debug($"Skipping empty map background layer: {bgPath}");
+            return null;
+        }
+
         // Blend textures together
         Parallel.For(0, 2048 * 2048, i =>
         {
@@ -362,6 +375,39 @@ public class MapWindow : Window, IDisposable
         });
 
         return textureProvider.CreateFromRaw(RawImageSpecification.Rgba32(2048, 2048), backgroundBytes);
+    }
+
+    private static bool IsEffectivelyEmptyMapLayer(byte[] rgbaBytes)
+    {
+        if (rgbaBytes.Length < 4)
+        {
+            return true;
+        }
+
+        var pixelCount = rgbaBytes.Length / 4;
+        var nonEmptyPixelLimit = Math.Max(1, pixelCount / 100);
+        var visiblePixels = 0;
+        var nonBlackPixels = 0;
+
+        for (var i = 0; i < rgbaBytes.Length; i += 4)
+        {
+            if (rgbaBytes[i + 3] > 8)
+            {
+                visiblePixels++;
+            }
+
+            if (rgbaBytes[i] > 4 || rgbaBytes[i + 1] > 4 || rgbaBytes[i + 2] > 4)
+            {
+                nonBlackPixels++;
+            }
+
+            if (visiblePixels > nonEmptyPixelLimit && nonBlackPixels > nonEmptyPixelLimit)
+            {
+                return false;
+            }
+        }
+
+        return visiblePixels <= nonEmptyPixelLimit || nonBlackPixels <= nonEmptyPixelLimit;
     }
 
     private TexFile? GetTexFile(string rawPath)
@@ -484,6 +530,125 @@ public class MapWindow : Window, IDisposable
         }
     }
 
+    private void DrawLocalCategoryMarkers()
+    {
+        foreach (var marker in GetLocalCategoryMarkersForCurrentMap())
+        {
+            if (!ShouldDrawLocalCategoryMarker(marker))
+            {
+                continue;
+            }
+
+            DrawLocalCategoryMarker(marker);
+        }
+    }
+
+    private IReadOnlyList<LocalMapCategoryMarker> GetLocalCategoryMarkersForCurrentMap()
+    {
+        if (localCategoryMarkerCacheMap == mapStateManager.currentMap.RowId)
+        {
+            return localCategoryMarkerCache;
+        }
+
+        localCategoryMarkerCacheMap = mapStateManager.currentMap.RowId;
+        localCategoryMarkerCache = new List<LocalMapCategoryMarker>();
+        AddFishingSpotMarkers(localCategoryMarkerCache);
+        AddSpearfishingSpotMarkers(localCategoryMarkerCache);
+        return localCategoryMarkerCache;
+    }
+
+    private void AddFishingSpotMarkers(List<LocalMapCategoryMarker> markers)
+    {
+        foreach (var spot in dataManager.GetExcelSheet<Lumina.Excel.Sheets.FishingSpot>(clientState.ClientLanguage))
+        {
+            if (!spot.TerritoryType.IsValid || spot.TerritoryType.Value.Map.RowId != mapStateManager.currentMap.RowId)
+            {
+                continue;
+            }
+
+            var name = spot.PlaceName.IsValid ? spot.PlaceName.Value.Name.ToString() : $"Fishing Spot #{spot.RowId}";
+            var position = GetWorldPositionForMapCoordinate(new Vector2(spot.X, spot.Z));
+            markers.Add(new LocalMapCategoryMarker("Fishingspot", spot.RowId, name, GetFishingSpotIconId(spot), position, spot.Radius / 6.0f));
+        }
+    }
+
+    private void AddSpearfishingSpotMarkers(List<LocalMapCategoryMarker> markers)
+    {
+        foreach (var spot in dataManager.GetExcelSheet<Lumina.Excel.Sheets.SpearfishingNotebook>(clientState.ClientLanguage))
+        {
+            if (!spot.TerritoryType.IsValid || spot.TerritoryType.Value.Map.RowId != mapStateManager.currentMap.RowId)
+            {
+                continue;
+            }
+
+            var name = spot.PlaceName.IsValid ? spot.PlaceName.Value.Name.ToString() : $"Spearfishing Spot #{spot.RowId}";
+            var position = GetWorldPositionForMapCoordinate(new Vector2(spot.X, spot.Y));
+            markers.Add(new LocalMapCategoryMarker("SpearfishingNotebook", spot.RowId, name, GetSpearfishingSpotIconId(spot), position, spot.Radius / 3.0f));
+        }
+    }
+
+    private bool ShouldDrawLocalCategoryMarker(LocalMapCategoryMarker marker)
+    {
+        var scope = GetCurrentContentScope();
+        return ShouldDrawContent(marker.Category, scope) &&
+            configuration.IsIconCategoryEntryEnabled(scope, marker.Category, marker.IconId) &&
+            MatchesMapSearch(marker);
+    }
+
+    private void DrawLocalCategoryMarker(LocalMapCategoryMarker marker)
+    {
+        var center = GetMapScreenPosition(marker.Position);
+        var drawList = ImGui.GetWindowDrawList();
+        var radius = marker.Radius > 0 ? marker.Radius * Scale : 10.0f * ImGuiHelpers.GlobalScale;
+        var fillColor = GetLocalCategoryColor(marker.Category, 0.26f);
+        var outlineColor = GetLocalCategoryColor(marker.Category, 0.92f);
+
+        drawList.AddCircleFilled(center, radius, ImGui.GetColorU32(fillColor), 32);
+        drawList.AddCircle(center, radius, ImGui.GetColorU32(outlineColor), 32, MathF.Max(1.0f, ImGuiHelpers.GlobalScale));
+
+        if (marker.IconId != 0)
+        {
+            var texture = textureProvider.GetFromGameIcon((int)marker.IconId).GetWrapOrEmpty();
+            var size = new Vector2(22.0f * ImGuiHelpers.GlobalScale);
+            drawList.AddImage(texture.Handle, center - size / 2.0f, center + size / 2.0f);
+        }
+
+        if (IsMouseInsideMapCanvas() && Vector2.Distance(ImGui.GetMousePos(), center) <= MathF.Max(radius, 14.0f))
+        {
+            ImGui.SetTooltip($"{GetLocalCategoryDisplayName(marker.Category)}: {marker.Name}\n{marker.Position.X:F1}, {marker.Position.Z:F1}");
+        }
+    }
+
+    private static uint GetFishingSpotIconId(Lumina.Excel.Sheets.FishingSpot spot)
+    {
+        return spot.Rare ? 60466u : 60465u;
+    }
+
+    private static uint GetSpearfishingSpotIconId(Lumina.Excel.Sheets.SpearfishingNotebook spot)
+    {
+        return spot.IsShadowNode ? 60930u : 60929u;
+    }
+
+    private static Vector4 GetLocalCategoryColor(string category, float alpha)
+    {
+        return category switch
+        {
+            "Fishingspot" => new Vector4(0.20f, 0.55f, 1.00f, alpha),
+            "SpearfishingNotebook" => new Vector4(0.00f, 0.75f, 0.85f, alpha),
+            _ => new Vector4(1.0f, 1.0f, 1.0f, alpha),
+        };
+    }
+
+    private static string GetLocalCategoryDisplayName(string category)
+    {
+        return category switch
+        {
+            "Fishingspot" => "Fishing spot",
+            "SpearfishingNotebook" => "Spearfishing spot",
+            _ => category,
+        };
+    }
+
     private unsafe void DrawPlacedMapMarkers()
     {
         var agentMap = AgentMap.Instance();
@@ -501,6 +666,11 @@ public class MapWindow : Window, IDisposable
         {
             var marker = agentMap->TempMapMarkers[i];
             DrawPlacedMapMarker(marker);
+        }
+
+        foreach (var marker in agentMap->EventMarkers)
+        {
+            DrawEventMapMarker(marker);
         }
     }
 
@@ -522,7 +692,7 @@ public class MapWindow : Window, IDisposable
         }
     }
 
-    private void DrawPlacedMapMarkerRadius(Vector2 mapPosition, int radius)
+    private void DrawPlacedMapMarkerRadius(Vector2 mapPosition, float radius)
     {
         if (radius <= 0)
         {
@@ -541,6 +711,18 @@ public class MapWindow : Window, IDisposable
         var lineColor = ImGui.GetColorU32(new Vector4(0.08f, 0.46f, 0.16f, 0.9f));
         drawList.AddCircleFilled(center, scaledRadius, fillColor, 64);
         drawList.AddCircle(center, scaledRadius, lineColor, 64, MathF.Max(1.0f, ImGuiHelpers.GlobalScale));
+    }
+
+    private void DrawEventMapMarker(FFXIVClientStructs.FFXIV.Client.Game.UI.MapMarkerData marker)
+    {
+        if (marker.Radius <= 0 ||
+            marker.MapId != mapStateManager.currentMap.RowId ||
+            marker.TerritoryTypeId != mapStateManager.currentMap.TerritoryType.RowId)
+        {
+            return;
+        }
+
+        DrawPlacedMapMarkerRadius(GetMapCoordinateFor3D(marker.Position), marker.Radius * GetMapScaleFactor());
     }
 
     private void DrawPlacedMapMarkerIcon(int iconId, Vector2 mapPosition, string tooltip)
@@ -811,12 +993,14 @@ public class MapWindow : Window, IDisposable
                 "EventNpc" => configuration.DrawENpc,
                 "EventObj" => configuration.DrawEObj,
                 "FATE" => configuration.DrawFates,
+                "Fishingspot" => configuration.DrawFishingSpots,
                 "GatheringPoint" => configuration.DrawGatheringPoint,
                 "HousingMapMarkerInfo" => configuration.DrawHousingMapMarkers,
                 "MapMarkerLabelsOnly" => configuration.DrawMapMarkerLabelsOnly,
                 "MapMarkersWithIcons" => configuration.DrawMapMarkersWithIcons,
                 "RemoteMarker" => configuration.DrawRemoteMarker,
                 "SightseeingLog" => configuration.DrawSightseeingLogEntries,
+                "SpearfishingNotebook" => configuration.DrawSpearfishingSpots,
                 "Treasure" => configuration.DrawTreasure,
                 "TreasureMaps" => configuration.DrawTreasureMaps,
                 _ => true,
@@ -828,12 +1012,14 @@ public class MapWindow : Window, IDisposable
                 "EventNpc" => configuration.DrawContentFinderENpc,
                 "EventObj" => configuration.DrawContentFinderEObj,
                 "FATE" => configuration.DrawContentFinderFates,
+                "Fishingspot" => configuration.DrawContentFinderFishingSpots,
                 "GatheringPoint" => configuration.DrawContentFinderGatheringPoint,
                 "HousingMapMarkerInfo" => configuration.DrawContentFinderHousingMapMarkers,
                 "MapMarkerLabelsOnly" => configuration.DrawContentFinderMapMarkerLabelsOnly,
                 "MapMarkersWithIcons" => configuration.DrawContentFinderMapMarkersWithIcons,
                 "RemoteMarker" => configuration.DrawContentFinderRemoteMarker,
                 "SightseeingLog" => configuration.DrawContentFinderSightseeingLogEntries,
+                "SpearfishingNotebook" => configuration.DrawContentFinderSpearfishingSpots,
                 "Treasure" => configuration.DrawContentFinderTreasure,
                 "TreasureMaps" => configuration.DrawContentFinderTreasureMaps,
                 _ => true,
@@ -1093,6 +1279,16 @@ public class MapWindow : Window, IDisposable
         return !mapStateManager.filterEnabled ||
             mapStateManager.filterExpression == string.Empty ||
             marker.PlaceNameSubtext.Value.Name.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private bool MatchesMapSearch(LocalMapCategoryMarker marker)
+    {
+        return !mapStateManager.filterEnabled ||
+            mapStateManager.filterExpression == string.Empty ||
+            marker.Name.Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase) ||
+            GetLocalCategoryDisplayName(marker.Category).Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase) ||
+            marker.RowId.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase) ||
+            marker.IconId.ToString().Contains(mapStateManager.filterExpression, StringComparison.CurrentCultureIgnoreCase);
     }
 
     private Vector2 GetMapScreenPosition(Vector3 position)
@@ -1397,6 +1593,13 @@ public class MapWindow : Window, IDisposable
         var mapcoord = ((twoD + GetRawMapOffsetVector()) * GetMapScaleFactor()) + GetMapCenterOffsetVector();
         return mapcoord;
     }
+
+    private Vector3 GetWorldPositionForMapCoordinate(Vector2 mapCoordinate)
+    {
+        var twoD = ((mapCoordinate - GetMapCenterOffsetVector()) / GetMapScaleFactor()) - GetRawMapOffsetVector();
+        return new Vector3(twoD.X, 0, twoD.Y);
+    }
+
     public Vector2 GetPlayerMapPosition(Vector3 vec) => new Vector2(vec.X, vec.Z) * GetMapScaleFactor();
     private static Vector2 ImRotate(Vector2 v, float cosA, float sinA) => new(v.X * cosA - v.Y * sinA, v.X * sinA + v.Y * cosA);
 
