@@ -81,12 +81,15 @@ public sealed class Plugin : IDalamudPlugin
             .AddSingleton<MapWindow>()
             .AddSingleton<SearchWindow>()
             .AddSingleton<UploadManager>()
+            .AddSingleton<AllaganToolsIpc>()
             .AddSingleton<ObjTrackManager>()
             .AddSingleton<MapStateManager>()
             .AddSingleton<TopBar>()
             .AddSingleton<BottomBar>()
             .AddSingleton(windowSystem)
             .AddTransient<DetailsWindow>()
+            .AddTransient<ItemExtraDataWindow>()
+            .AddTransient<SightseeingLogEntryWindow>()
             .BuildServiceProvider();
 
         MainWindow = serviceProvider.GetRequiredService<MainWindow>();
@@ -126,8 +129,10 @@ public sealed class Plugin : IDalamudPlugin
 
         // Adds another button doing the same but for the main ui of the plugin
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
+        clientState.Login += OnLogin;
         framework.Update += OnFrameworkUpdate;
         openMapHook.Enable();
+        _ = serviceProvider.GetRequiredService<UploadManager>().ReloadChestDropsAsync();
 
         // Add a simple message to the log with level set to information
         // Use /xllog to open the log window in-game
@@ -141,7 +146,9 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.Draw -= windowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
+        ClientState.Login -= OnLogin;
         serviceProvider.GetRequiredService<IFramework>().Update -= OnFrameworkUpdate;
+        serviceProvider.GetRequiredService<ObjTrackManager>().Dispose();
         openMapHook.Dispose();
         
         windowSystem.RemoveAllWindows();
@@ -158,6 +165,11 @@ public sealed class Plugin : IDalamudPlugin
     }
     public void ToggleConfigUi() => ConfigWindow.Toggle();
     public void ToggleMainUi() => MainWindow.Toggle();
+
+    private void OnLogin()
+    {
+        _ = serviceProvider.GetRequiredService<UploadManager>().ReloadChestDropsAsync();
+    }
 
     private void OnFrameworkUpdate(IFramework framework)
     {
